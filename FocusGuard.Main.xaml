@@ -118,6 +118,63 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#25362F"/>
+    </Style>
+    <Style x:Key="FieldHint" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Foreground" Value="#7E8A84"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="SettingsTabItem" TargetType="TabItem">
+      <Setter Property="Foreground" Value="#5D6A64"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="TabPill" Background="#EDF2EE" CornerRadius="9"
+                    Padding="15,8" Margin="0,0,8,0">
+              <ContentPresenter ContentSource="Header" HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                TextElement.Foreground="{TemplateBinding Foreground}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabPill" Property="Background" Value="#173F31"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabPill" Property="Opacity" Value="0.86"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SettingsTabControl" TargetType="TabControl">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabControl">
+            <Grid KeyboardNavigation.TabNavigation="Local">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <TabPanel x:Name="HeaderPanel" Grid.Row="0" IsItemsHost="True"/>
+              <Border Grid.Row="1" Padding="0,17,0,0">
+                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+              </Border>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <Grid Margin="28,24,28,20">
@@ -152,7 +209,9 @@
           </StackPanel>
         </Border>
         <Button x:Name="HideButton" Content="最小化" Style="{StaticResource SmallButton}"
-                Margin="10,0,0,0" ToolTip="最小化后仍保留在任务栏"/>
+                Margin="10,0,0,0" ToolTip="保留在任务栏，不退出"/>
+        <Button x:Name="ExitButton" Content="退出" Style="{StaticResource SmallButton}"
+                Margin="8,0,0,0" ToolTip="完全退出专注守卫"/>
       </StackPanel>
     </Grid>
 
@@ -167,75 +226,155 @@
         <Border.Effect>
           <DropShadowEffect Color="#20382F" BlurRadius="18" ShadowDepth="3" Opacity="0.08"/>
         </Border.Effect>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel Margin="0,0,0,15">
             <TextBlock Text="本轮计划" FontSize="18" FontWeight="Bold"/>
-            <TextBlock Text="先定义目标，再设置允许范围。" Foreground="#75807A" FontSize="11" Margin="0,4,0,16"/>
-            <TextBlock Text="这次要完成什么？" FontWeight="SemiBold" FontSize="12"/>
-            <TextBox x:Name="TaskBox" Margin="0,7,0,14" Text="完成当前最重要的任务"/>
-            <Grid Margin="0,0,0,9">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-              <StackPanel Grid.Column="0">
-                <TextBlock Text="专注时长 / 分钟" FontWeight="SemiBold" FontSize="12"/>
-                <TextBox x:Name="DurationBox" Margin="0,7,0,0" Text="45"/>
-              </StackPanel>
-              <StackPanel Grid.Column="2">
-                <TextBlock Text="无操作提醒 / 秒" FontWeight="SemiBold" FontSize="12"/>
-                <TextBox x:Name="IdleBox" Margin="0,7,0,0" Text="180"/>
-              </StackPanel>
-            </Grid>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-              <TextBlock Text="快捷设置" Foreground="#7B8580" FontSize="11"
-                         VerticalAlignment="Center" Margin="0,0,9,0"/>
-              <Button x:Name="Duration25Button" Content="25 分钟" Style="{StaticResource ChipButton}"/>
-              <Button x:Name="Duration45Button" Content="45 分钟" Style="{StaticResource ChipButton}"/>
-              <Button x:Name="Duration60Button" Content="60 分钟" Style="{StaticResource ChipButton}"/>
-            </StackPanel>
-            <Grid Margin="0,0,0,15">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-              <StackPanel Grid.Column="0">
-                <TextBlock Text="跑偏宽限 / 秒" FontWeight="SemiBold" FontSize="12"/>
-                <TextBox x:Name="GraceBox" Margin="0,7,0,0" Text="25"/>
-              </StackPanel>
-              <StackPanel Grid.Column="2">
-                <TextBlock Text="提醒语气" FontWeight="SemiBold" FontSize="12"/>
-                <ComboBox x:Name="ToneBox" Margin="0,7,0,0" SelectedIndex="1">
-                  <ComboBoxItem Content="温和"/>
-                  <ComboBoxItem Content="直接"/>
-                  <ComboBoxItem Content="暴躁"/>
-                </ComboBox>
-              </StackPanel>
-            </Grid>
-            <Border Height="1" Background="#E6EBE7" Margin="0,0,0,15"/>
-            <TextBlock Text="允许范围" FontSize="15" FontWeight="Bold"/>
-            <TextBlock Text="不在以下范围内的窗口，超过宽限时间后会提醒。"
-                       Foreground="#7B8580" FontSize="11" Margin="0,4,0,12" TextWrapping="Wrap"/>
-            <TextBlock Text="允许的应用进程（每行一个）" FontWeight="SemiBold" FontSize="12"/>
-            <TextBox x:Name="AllowedAppsBox" Height="70" AcceptsReturn="True"
-                     VerticalScrollBarVisibility="Auto" Margin="0,7,0,7"
-                     Text="code&#x0a;winword&#x0a;excel&#x0a;powerpnt&#x0a;notepad&#x0a;obsidian"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-              <Button x:Name="AddCurrentAppButton" Content="＋ 加入最近使用的应用" Style="{StaticResource SmallButton}"/>
-              <TextBlock Text="支持 .exe" Foreground="#87918C" FontSize="10"
-                         VerticalAlignment="Center" Margin="9,0,0,0"/>
-            </StackPanel>
-            <TextBlock Text="允许的窗口标题关键词（每行一个）" FontWeight="SemiBold" FontSize="12"/>
-            <TextBox x:Name="AllowedTitlesBox" Height="70" AcceptsReturn="True"
-                     VerticalScrollBarVisibility="Auto" Margin="0,7,0,5"
-                     Text="Codex&#x0a;Visual Studio Code&#x0a;Microsoft Word&#x0a;Excel&#x0a;PowerPoint&#x0a;Notion&#x0a;学习&#x0a;工作&#x0a;课程&#x0a;文档"/>
-            <TextBlock Text="浏览器建议按网页标题放行；加入浏览器进程会允许其中所有网页。"
-                       TextWrapping="Wrap" Foreground="#87918C" FontSize="10" Margin="0,0,0,12"/>
-            <CheckBox x:Name="SoundCheck" Content="提醒和完成时播放提示音" IsChecked="True" FontSize="12"/>
+            <TextBlock Text="先设置这一轮；高级规则放在单独页面。"
+                       Foreground="#75807A" FontSize="11" Margin="0,4,0,0"/>
           </StackPanel>
-        </ScrollViewer>
+          <TabControl Grid.Row="1" SelectedIndex="0" Style="{StaticResource SettingsTabControl}">
+            <TabItem Header="专注设置" Style="{StaticResource SettingsTabItem}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,1,4,0">
+                  <TextBlock Text="本轮目标" Style="{StaticResource FieldLabel}"/>
+                  <TextBlock Text="写一个明确、可以完成的结果。" Style="{StaticResource FieldHint}" Margin="0,3,0,7"/>
+                  <TextBox x:Name="TaskBox" Text="完成当前最重要的任务" ToolTip="例如：完成课程报告第一稿"/>
+
+                  <TextBlock Text="专注时长" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+                  <TextBlock Text="可以直接输入分钟，或使用快捷选项。" Style="{StaticResource FieldHint}" Margin="0,3,0,7"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="105"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="DurationBox" Text="45" ToolTip="范围：1–480 分钟"/>
+                    <TextBlock Grid.Column="1" Text="分钟" Foreground="#68756E"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                  </Grid>
+                  <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                    <Button x:Name="Duration25Button" Content="25 分钟" Style="{StaticResource ChipButton}"/>
+                    <Button x:Name="Duration45Button" Content="45 分钟" Style="{StaticResource ChipButton}"/>
+                    <Button x:Name="Duration60Button" Content="60 分钟" Style="{StaticResource ChipButton}"/>
+                  </StackPanel>
+
+                  <Border Background="#F1F5F2" BorderBrush="#E0E7E2" BorderThickness="1"
+                          CornerRadius="11" Padding="14" Margin="0,17,0,0">
+                    <StackPanel>
+                      <TextBlock Text="什么时候提醒我？" FontSize="13" FontWeight="Bold"/>
+                      <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*"/>
+                          <ColumnDefinition Width="13"/>
+                          <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                          <TextBlock Text="无操作提醒" Style="{StaticResource FieldLabel}"/>
+                          <TextBlock Text="多久没碰键鼠" Style="{StaticResource FieldHint}" Margin="0,2,0,6"/>
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*"/>
+                              <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="IdleBox" Text="180" ToolTip="推荐 180 秒"/>
+                            <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center"
+                                       Foreground="#6F7B75" Margin="7,0,0,0"/>
+                          </Grid>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                          <TextBlock Text="跑偏宽限" Style="{StaticResource FieldLabel}"/>
+                          <TextBlock Text="切走后等待多久" Style="{StaticResource FieldHint}" Margin="0,2,0,6"/>
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*"/>
+                              <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="GraceBox" Text="25" ToolTip="推荐 25 秒"/>
+                            <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center"
+                                       Foreground="#6F7B75" Margin="7,0,0,0"/>
+                          </Grid>
+                        </StackPanel>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+
+                  <StackPanel Margin="0,16,0,0">
+                    <StackPanel>
+                      <TextBlock Text="提醒语气" Style="{StaticResource FieldLabel}"/>
+                      <ComboBox x:Name="ToneBox" Margin="0,7,0,0" SelectedIndex="1">
+                        <ComboBoxItem Content="温和"/>
+                        <ComboBoxItem Content="直接"/>
+                        <ComboBoxItem Content="暴躁"/>
+                      </ComboBox>
+                    </StackPanel>
+                    <CheckBox x:Name="SoundCheck" Content="开启系统提示音（不含语音播报）"
+                              IsChecked="True" FontSize="12" Margin="0,11,0,0"/>
+                  </StackPanel>
+                  <TextBlock Text="只轮换具体文案，始终保持你选择的语气；48 小时内不重复。"
+                             Style="{StaticResource FieldHint}" Margin="0,8,0,0"/>
+
+                  <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="推荐：45 分钟 · 180 秒无操作 · 25 秒宽限"
+                               Style="{StaticResource FieldHint}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" x:Name="ResetSettingsButton" Content="恢复推荐参数"
+                            Style="{StaticResource SmallButton}"/>
+                  </Grid>
+                </StackPanel>
+              </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="允许范围" Style="{StaticResource SettingsTabItem}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,1,4,0">
+                  <Border Background="#EAF4EE" BorderBrush="#D7E8DD" BorderThickness="1"
+                          CornerRadius="10" Padding="13">
+                    <StackPanel>
+                      <TextBlock Text="规则怎么生效？" FontSize="12" FontWeight="Bold" Foreground="#24533F"/>
+                      <TextBlock Text="应用名或标题关键词只要命中一项，就视为专注范围内；两项都留空表示不限制应用。"
+                                 Foreground="#557166" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    </StackPanel>
+                  </Border>
+
+                  <TextBlock Text="允许的应用" Style="{StaticResource FieldLabel}" Margin="0,17,0,0"/>
+                  <TextBlock Text="适合编辑器、Office 等始终用于工作的软件。每行一个进程名。"
+                             Style="{StaticResource FieldHint}" Margin="0,3,0,7"/>
+                  <TextBox x:Name="AllowedAppsBox" Height="112" AcceptsReturn="True"
+                           VerticalScrollBarVisibility="Auto"
+                           Text="code&#x0a;winword&#x0a;excel&#x0a;powerpnt&#x0a;notepad&#x0a;obsidian"/>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="AddCurrentAppButton" Content="＋ 加入最近使用的应用"
+                            Style="{StaticResource SmallButton}"/>
+                    <TextBlock Grid.Column="1" Text="例如：code、winword"
+                               Style="{StaticResource FieldHint}" VerticalAlignment="Center" Margin="9,0,0,0"/>
+                  </Grid>
+
+                  <TextBlock Text="允许的窗口标题关键词" Style="{StaticResource FieldLabel}" Margin="0,18,0,0"/>
+                  <TextBlock Text="适合浏览器网页。每行一个项目名、课程名或文档关键词。"
+                             Style="{StaticResource FieldHint}" Margin="0,3,0,7"/>
+                  <TextBox x:Name="AllowedTitlesBox" Height="122" AcceptsReturn="True"
+                           VerticalScrollBarVisibility="Auto"
+                           Text="Codex&#x0a;Visual Studio Code&#x0a;Microsoft Word&#x0a;Excel&#x0a;PowerPoint&#x0a;Notion&#x0a;学习&#x0a;工作&#x0a;课程&#x0a;文档"/>
+                  <Border Background="#FFF6E7" BorderBrush="#F0DFC0" BorderThickness="1"
+                          CornerRadius="9" Padding="11,9" Margin="0,10,0,0">
+                    <TextBlock Text="提示：不要直接允许 chrome 或 msedge，否则浏览器里的娱乐网页也会被放行。"
+                               Foreground="#806233" FontSize="10" TextWrapping="Wrap"/>
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+            </TabItem>
+          </TabControl>
+        </Grid>
       </Border>
       <Border Grid.Column="2" Background="#162C24" CornerRadius="18" Padding="30"
               BorderBrush="#24483A" BorderThickness="1">
@@ -361,7 +500,7 @@
       </Grid.ColumnDefinitions>
       <TextBlock Text="仅在本机检查空闲时长、应用名和窗口标题；不截屏、不读取按键内容、不上传数据。"
                  Foreground="#75807A" FontSize="10" VerticalAlignment="Center"/>
-      <TextBlock Grid.Column="1" Text="关闭与最小化都会保留在任务栏"
+      <TextBlock Grid.Column="1" Text="关闭会收起窗口并继续运行 · 退出按钮才会完全关闭"
                  Foreground="#89938E" FontSize="10" VerticalAlignment="Center"/>
     </Grid>
   </Grid>

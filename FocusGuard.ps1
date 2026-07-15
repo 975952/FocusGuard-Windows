@@ -14,6 +14,43 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+public sealed class FocusGuardTrayRecoveryWindow : NativeWindow, IDisposable
+{
+    private readonly int taskbarCreatedMessage;
+
+    public event EventHandler TaskbarCreated;
+
+    public FocusGuardTrayRecoveryWindow()
+    {
+        taskbarCreatedMessage = (int)RegisterWindowMessage("TaskbarCreated");
+        CreateHandle(new CreateParams());
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterWindowMessage(string message);
+
+    protected override void WndProc(ref Message message)
+    {
+        if (message.Msg == taskbarCreatedMessage)
+        {
+            EventHandler handler = TaskbarCreated;
+            if (handler != null) handler(this, EventArgs.Empty);
+        }
+        base.WndProc(ref message);
+    }
+
+    public void Dispose()
+    {
+        if (Handle != IntPtr.Zero) DestroyHandle();
+    }
+}
+'@ -ReferencedAssemblies 'System.Windows.Forms.dll'
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 public static class FocusGuardNative
@@ -259,7 +296,10 @@ public static class FocusGuardNative
         <ColumnDefinition Width="Auto"/>
       </Grid.ColumnDefinitions>
       <TextBlock Text="隐私：不截屏、不读取按键内容、不上传数据；仅检查空闲时长、应用名和窗口标题。" Foreground="#77746C" FontSize="11" VerticalAlignment="Center"/>
-      <Button Grid.Column="1" x:Name="HideButton" Content="隐藏到托盘" Style="{StaticResource SmallButton}"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="HideButton" Content="最小化" Style="{StaticResource SmallButton}"/>
+        <Button x:Name="ExitButton" Content="退出" Style="{StaticResource SmallButton}" Margin="8,0,0,0"/>
+      </StackPanel>
     </Grid>
   </Grid>
 </Window>
@@ -383,6 +423,67 @@ function Get-IntSetting {
     return [Math]::Max($Minimum, [Math]::Min($Maximum, $value))
 }
 
+function New-ReminderCopy {
+    param(
+        [ValidateSet('idle', 'offtask')][string]$Reason,
+        [ValidateSet('温和', '直接', '暴躁')][string]$Tone,
+        [string]$Task,
+        [System.Collections.Generic.HashSet[string]]$UsedKeys
+    )
+
+    if (-not $UsedKeys) {
+        $UsedKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+    }
+    if ([string]::IsNullOrWhiteSpace($Task)) { $Task = '你刚才定下的任务' }
+
+    $openers = @(switch ($Tone) {
+        '温和' { '先停一下。'; '轻轻把注意力收回来。'; '没关系，现在回来就好。'; '给自己一个重新开始的机会。'; '先做一次小小的重置。'; '注意力偶尔走远很正常。'; '我们慢一点，把方向找回来。'; '现在正好可以重新对焦。' }
+        '暴躁' { '停，别继续跑偏。'; '注意力又溜走了。'; '这轮专注不是摆设。'; '先别给摸鱼找借口。'; '方向错了，马上拉回来。'; '该刹车了。'; '别让无关内容接管时间。'; '现在立刻重新对焦。' }
+        default { '停一下。'; '把注意力拉回来。'; '现在重新对焦。'; '先确认当前方向。'; '别让这一分钟继续溜走。'; '回到计划。'; '这里需要一次注意力重置。'; '暂停无关动作。' }
+    })
+    $contexts = @(if ($Reason -eq 'idle') {
+        '键鼠已经安静了一会儿。'; '系统检测到一段时间没有操作。'; '这一小段停顿已经有点久了。'; '当前任务暂时没有新的操作。'; '你似乎在原地停留了一会儿。'; '专注节奏刚刚中断了。'; '屏幕前已经安静了一段时间。'; '这轮任务暂时失去了动作。'
+    } else {
+        '当前窗口不在这轮计划里。'; '你刚才打开的内容不在允许范围。'; '注意力已经离开本轮目标。'; '当前应用和任务方向不一致。'; '刚才的窗口与计划无关。'; '专注范围外的内容正在占用时间。'; '你已经在无关窗口停留了一会儿。'; '当前去向偏离了本轮任务。'
+    })
+    $actions = @(
+        "回到「$Task」，先完成最小的一步。",
+        "现在切回「$Task」，连续做两分钟。",
+        "关掉无关内容，继续「$Task」的下一步。",
+        "把手放回任务上，从「$Task」最容易的部分继续。",
+        "只做一个动作：回到「$Task」。",
+        "先完成「$Task」里眼前这一小段。",
+        "重新打开需要的内容，继续推进「$Task」。",
+        "给「$Task」一个完整的五分钟，不再切换。"
+    )
+    $closers = @(switch ($Tone) {
+        '温和' { '不用追求完美，继续就很好。'; '一次小小的返回也算进步。'; '慢慢来，但现在就开始。'; '把下一步做完就够了。'; '你仍然可以守住这一轮。'; '给自己一点耐心，也给任务一点行动。'; '重新开始永远不晚。'; '继续一点点，节奏会回来的。' }
+        '暴躁' { '别犹豫，马上行动。'; '现在就切回去。'; '少想借口，先做。'; '把无关窗口关掉。'; '别再浪费下一分钟。'; '动作快一点。'; '这次直接做，不要拖。'; '回去，完成它。' }
+        default { '现在执行。'; '先行动，再考虑其他事。'; '守住接下来的两分钟。'; '不要继续切换窗口。'; '完成下一步再休息。'; '让计划重新接管注意力。'; '从现在这一秒继续。'; '做完眼前一步。' }
+    })
+
+    $total = $openers.Count * $contexts.Count * $actions.Count * $closers.Count
+    $start = Get-Random -Minimum 0 -Maximum $total
+    for ($offset = 0; $offset -lt $total; $offset++) {
+        $value = ($start + $offset) % $total
+        $openerIndex = $value % $openers.Count
+        $value = [Math]::Floor($value / $openers.Count)
+        $contextIndex = $value % $contexts.Count
+        $value = [Math]::Floor($value / $contexts.Count)
+        $actionIndex = $value % $actions.Count
+        $value = [Math]::Floor($value / $actions.Count)
+        $closerIndex = $value % $closers.Count
+        $key = "$Reason|$Tone|$openerIndex|$contextIndex|$actionIndex|$closerIndex"
+        if (-not $UsedKeys.Contains($key)) {
+            return [pscustomobject]@{
+                Key = $key
+                Text = "$($openers[$openerIndex]) $($contexts[$contextIndex]) $($actions[$actionIndex]) $($closers[$closerIndex])"
+            }
+        }
+    }
+    throw '48 小时提醒文案池已用尽'
+}
+
 function New-FocusGuardIcon {
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList 64, 64
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
@@ -417,12 +518,19 @@ if ($SelfTest) {
     if (-not (Find-Control $mainTest 'StartButton')) { throw '主窗口缺少 StartButton' }
     if (-not (Find-Control $mainTest 'SessionProgress')) { throw '主窗口缺少 SessionProgress' }
     if (-not (Find-Control $mainTest 'Duration25Button')) { throw '主窗口缺少快捷时长按钮' }
+    if (-not (Find-Control $mainTest 'ResetSettingsButton')) { throw '主窗口缺少推荐参数按钮' }
     if (-not (Find-Control $mainTest 'EndBreakButton')) { throw '主窗口缺少结束休息按钮' }
+    if (-not (Find-Control $mainTest 'ExitButton')) { throw '主窗口缺少 ExitButton' }
     if (-not (Find-Control $reminderTest 'ReturnButton')) { throw '提醒窗口缺少 ReturnButton' }
     if (-not (Test-SnapshotAllowed -ProcessName 'code' -Title 'anything' -AllowedApps @('code.exe') -AllowedTitles @())) { throw '应用规则测试失败' }
     if (-not (Test-SnapshotAllowed -ProcessName 'chrome' -Title '课程 - Chrome' -AllowedApps @() -AllowedTitles @('课程'))) { throw '标题规则测试失败' }
     if (Test-SnapshotAllowed -ProcessName 'chrome' -Title '短视频 - Chrome' -AllowedApps @('code') -AllowedTitles @('课程')) { throw '跑偏规则测试失败' }
     if (Test-SnapshotAllowed -ProcessName 'powershell' -Title '无关脚本' -AllowedApps @('code') -AllowedTitles @('课程')) { throw 'PowerShell 不应被无条件放行' }
+    $copyKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+    1..100 | ForEach-Object {
+        $copy = New-ReminderCopy -Reason 'offtask' -Tone '直接' -Task '测试任务' -UsedKeys $copyKeys
+        if (-not $copyKeys.Add($copy.Key)) { throw '提醒文案重复测试失败' }
+    }
     $testIcon = New-FocusGuardIcon
     if (-not $testIcon) { throw '应用图标创建失败' }
     $testIcon.Dispose()
@@ -433,19 +541,32 @@ if ($SelfTest) {
     exit 0
 }
 
+$showRequestEventName = 'Local' + [char]92 + 'FocusGuardCN_ShowWindow'
 $createdNew = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\FocusGuardCN_SingleInstance', [ref]$createdNew)
 if (-not $createdNew) {
-    [System.Windows.MessageBox]::Show('专注守卫已经在运行，请看看任务栏右下角托盘。', '专注守卫') | Out-Null
+    try {
+        $existingShowEvent = [System.Threading.EventWaitHandle]::OpenExisting($showRequestEventName)
+        [void]$existingShowEvent.Set()
+        $existingShowEvent.Dispose()
+    } catch {
+        [System.Windows.MessageBox]::Show('专注守卫正在后台运行，请稍后再启动一次以恢复窗口。', '专注守卫') | Out-Null
+    }
     exit 0
 }
 
 [void][FocusGuardNative]::SetCurrentProcessExplicitAppUserModelID('FocusGuardCN.Desktop')
 $appIcon = New-FocusGuardIcon
+$showRequestEvent = [System.Threading.EventWaitHandle]::new(
+    $false,
+    [System.Threading.EventResetMode]::AutoReset,
+    $showRequestEventName
+)
 
 $settingsDirectory = Join-Path $env:APPDATA 'FocusGuardCN'
 $settingsPath = Join-Path $settingsDirectory 'settings.json'
 $logPath = Join-Path $settingsDirectory 'focusguard.log'
+$reminderHistoryPath = Join-Path $settingsDirectory 'reminder-history.json'
 
 function Write-AppLog {
     param([string]$Message)
@@ -456,6 +577,37 @@ function Write-AppLog {
         $line = '{0:yyyy-MM-dd HH:mm:ss}  {1}' -f (Get-Date), $Message
         Add-Content -LiteralPath $logPath -Value $line -Encoding UTF8
     } catch { }
+}
+
+function Load-ReminderHistory {
+    $script:ReminderHistory = @()
+    if (-not (Test-Path -LiteralPath $reminderHistoryPath)) { return }
+    try {
+        $items = @(Get-Content -LiteralPath $reminderHistoryPath -Raw -Encoding UTF8 | ConvertFrom-Json)
+        $cutoff = (Get-Date).AddDays(-2)
+        $recent = New-Object System.Collections.ArrayList
+        foreach ($item in $items) {
+            try {
+                if ([DateTime]$item.Timestamp -ge $cutoff -and $item.Key) {
+                    [void]$recent.Add($item)
+                }
+            } catch { }
+        }
+        $script:ReminderHistory = @($recent)
+    } catch {
+        Write-AppLog "读取提醒历史失败：$($_.Exception.Message)"
+    }
+}
+
+function Save-ReminderHistory {
+    try {
+        if (-not (Test-Path -LiteralPath $settingsDirectory)) {
+            New-Item -ItemType Directory -Path $settingsDirectory -Force | Out-Null
+        }
+        @($script:ReminderHistory) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $reminderHistoryPath -Encoding UTF8
+    } catch {
+        Write-AppLog "保存提醒历史失败：$($_.Exception.Message)"
+    }
 }
 
 $window = Convert-XamlToWindow -Xaml $MainXaml
@@ -480,6 +632,7 @@ $AddCurrentAppButton = Find-Control $window 'AddCurrentAppButton'
 $Duration25Button = Find-Control $window 'Duration25Button'
 $Duration45Button = Find-Control $window 'Duration45Button'
 $Duration60Button = Find-Control $window 'Duration60Button'
+$ResetSettingsButton = Find-Control $window 'ResetSettingsButton'
 $StatusBadgeContainer = Find-Control $window 'StatusBadgeContainer'
 $StatusDot = Find-Control $window 'StatusDot'
 $StatusBadge = Find-Control $window 'StatusBadge'
@@ -497,6 +650,7 @@ $PauseButton = Find-Control $window 'PauseButton'
 $EndBreakButton = Find-Control $window 'EndBreakButton'
 $StopButton = Find-Control $window 'StopButton'
 $HideButton = Find-Control $window 'HideButton'
+$ExitButton = Find-Control $window 'ExitButton'
 
 $script:SessionRunning = $false
 $script:IsPaused = $false
@@ -520,6 +674,7 @@ $script:PopupWindow = $null
 $script:PopupWindowHandle = [IntPtr]::Zero
 $script:SettingsLoaded = $false
 $script:LastErrorMessage = ''
+$script:ReminderHistory = @()
 
 function Save-Settings {
     $tone = '直接'
@@ -614,25 +769,43 @@ function Queue-SettingsSave {
     $settingsSaveTimer.Start()
 }
 
+function Restore-TrayIcon {
+    try {
+        if ($null -eq $notifyIcon) { return }
+        $notifyIcon.Visible = $false
+        $notifyIcon.Icon = $appIcon
+        $notifyIcon.Text = "专注守卫 · $($StatusBadge.Text)"
+        $notifyIcon.Visible = $true
+    } catch {
+        Write-AppLog "恢复托盘图标失败：$($_.Exception.Message)"
+    }
+}
+
 function Get-AlertCopy {
     param([string]$Reason)
     $task = $TaskBox.Text.Trim()
     if (-not $task) { $task = '你刚才定下的任务' }
     $tone = if ($ToneBox.SelectedItem) { $ToneBox.SelectedItem.Content.ToString() } else { '直接' }
-
-    if ($Reason -eq 'idle') {
-        switch ($tone) {
-            '温和' { return "好一会儿没有操作了。确认一下：你还在做「$task」吗？先动手做下一小步。" }
-            '暴躁' { return "人呢？专注局不是开来当壁纸的。现在动手，继续「$task」。" }
-            default { return "你已经一段时间没有操作。别让停顿变成放弃，马上继续「$task」。" }
-        }
+    $cutoff = (Get-Date).AddDays(-2)
+    $recent = New-Object System.Collections.ArrayList
+    $usedKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($item in @($script:ReminderHistory)) {
+        try {
+            if ([DateTime]$item.Timestamp -ge $cutoff -and $item.Key) {
+                [void]$recent.Add($item)
+                [void]$usedKeys.Add([string]$item.Key)
+            }
+        } catch { }
     }
-
-    switch ($tone) {
-        '温和' { return "注意力跑出去了。关掉无关内容，先回到「$task」做两分钟。" }
-        '暴躁' { return "又摸鱼？这是你亲手开的专注局，别演了。现在就滚回「$task」。" }
-        default { return "停。你现在看的不在计划里。关掉它，回到「$task」。" }
+    $script:ReminderHistory = @($recent)
+    $copy = New-ReminderCopy -Reason $Reason -Tone $tone -Task $task -UsedKeys $usedKeys
+    $script:ReminderHistory += [pscustomobject]@{
+        Timestamp = (Get-Date).ToString('o')
+        Key = $copy.Key
+        Text = $copy.Text
     }
+    Save-ReminderHistory
+    return $copy.Text
 }
 
 function Show-Reminder {
@@ -733,6 +906,7 @@ function Start-Session {
     $Duration25Button.IsEnabled = $false
     $Duration45Button.IsEnabled = $false
     $Duration60Button.IsEnabled = $false
+    $ResetSettingsButton.IsEnabled = $false
     $StartButton.IsEnabled = $false
     $StopButton.IsEnabled = $true
     $PauseButton.Content = '暂停'
@@ -782,6 +956,7 @@ function Stop-Session {
     $Duration25Button.IsEnabled = $true
     $Duration45Button.IsEnabled = $true
     $Duration60Button.IsEnabled = $true
+    $ResetSettingsButton.IsEnabled = $true
     $StartButton.IsEnabled = $true
     $StopButton.IsEnabled = $false
     $PauseButton.Content = '暂停'
@@ -804,7 +979,15 @@ function Stop-Session {
     Save-Settings
 }
 
+function Show-MainWindow {
+    $window.ShowInTaskbar = $true
+    $window.Show()
+    $window.WindowState = [Windows.WindowState]::Normal
+    [void]$window.Activate()
+}
+
 function Update-Tick {
+    if ($showRequestEvent.WaitOne(0)) { Show-MainWindow }
     $snapshot = Get-ForegroundSnapshot
     $isMainWindow = $script:MainWindowHandle -ne [IntPtr]::Zero -and $snapshot.Handle -eq $script:MainWindowHandle
     $isReminderWindow = $script:PopupWindowHandle -ne [IntPtr]::Zero -and $snapshot.Handle -eq $script:PopupWindowHandle
@@ -883,6 +1066,7 @@ function Update-Tick {
 }
 
 Load-Settings
+Load-ReminderHistory
 $CountdownLabel.Text = '{0:00}:00' -f (Get-IntSetting $DurationBox 45 1 480)
 $CurrentTaskLabel.Text = if ($TaskBox.Text.Trim()) { $TaskBox.Text.Trim() } else { '先写下这次要完成的事' }
 
@@ -922,21 +1106,49 @@ $endBreakItem.Enabled = $false
 $quitItem = $trayMenu.Items.Add('退出')
 $notifyIcon.ContextMenuStrip = $trayMenu
 
-$showWindow = {
-    $window.ShowInTaskbar = $true
-    $window.Show()
-    $window.WindowState = [Windows.WindowState]::Normal
-    $window.Activate() | Out-Null
-}
+$trayRecoveryWindow = New-Object FocusGuardTrayRecoveryWindow
+$trayRecoveryWindow.Add_TaskbarCreated({
+    Restore-TrayIcon
+    Write-AppLog '检测到 Windows 资源管理器重启，已重新注册托盘图标'
+})
+
+$trayHealthTimer = New-Object Windows.Threading.DispatcherTimer
+$trayHealthTimer.Interval = [TimeSpan]::FromSeconds(20)
+$trayHealthTimer.Add_Tick({
+    try {
+        if (-not $notifyIcon.Visible) { Restore-TrayIcon }
+    } catch {
+        Write-AppLog "托盘状态检查失败：$($_.Exception.Message)"
+    }
+})
+$trayHealthTimer.Start()
+
+$dispatcher = [Windows.Threading.Dispatcher]::CurrentDispatcher
+$dispatcher.Add_UnhandledException({
+    param($sender, $eventArgs)
+    $message = $eventArgs.Exception.Message
+    Write-AppLog "界面未捕获异常：$message"
+    try {
+        Restore-TrayIcon
+        $MonitorLabel.Text = '刚才遇到一个问题，程序已自动恢复'
+    } catch { }
+    $eventArgs.Handled = $true
+})
+
+$showWindow = { Show-MainWindow }
 $openItem.Add_Click($showWindow)
 $notifyIcon.Add_DoubleClick($showWindow)
+$notifyIcon.Add_BalloonTipClicked($showWindow)
 $pauseItem.Add_Click({ Pause-Session })
 $endBreakItem.Add_Click({ End-Break })
-$quitItem.Add_Click({
+
+function Exit-Application {
     $script:AllowExit = $true
     if ($script:PopupWindow) { $script:PopupWindow.Close() }
     $window.Close()
-})
+}
+
+$quitItem.Add_Click({ Exit-Application })
 
 $StartButton.Add_Click({
     try {
@@ -954,6 +1166,7 @@ $StartButton.Add_Click({
         $Duration25Button.IsEnabled = $true
         $Duration45Button.IsEnabled = $true
         $Duration60Button.IsEnabled = $true
+        $ResetSettingsButton.IsEnabled = $true
         $PhaseLabel.Text = '启动失败'
         $MonitorLabel.Text = "无法开始：$message"
         $StatusBadge.Text = '启动失败'
@@ -966,6 +1179,7 @@ $HideButton.Add_Click({
     $window.ShowInTaskbar = $true
     $window.WindowState = [Windows.WindowState]::Minimized
 })
+$ExitButton.Add_Click({ Exit-Application })
 $AddCurrentAppButton.Add_Click({
     if (-not $script:LastExternalSnapshot -or -not $script:LastExternalSnapshot.ProcessName) {
         [System.Windows.MessageBox]::Show('还没有检测到其他应用。先切换到要允许的应用，再回来点击。', '专注守卫') | Out-Null
@@ -986,6 +1200,16 @@ $Duration45Button.Add_Click({
 })
 $Duration60Button.Add_Click({
     if (-not $script:SessionRunning) { $DurationBox.Text = '60' }
+})
+$ResetSettingsButton.Add_Click({
+    if ($script:SessionRunning) { return }
+    $DurationBox.Text = '45'
+    $IdleBox.Text = '180'
+    $GraceBox.Text = '25'
+    $ToneBox.SelectedIndex = 1
+    $SoundCheck.IsChecked = $true
+    $MonitorLabel.Text = '已恢复推荐参数'
+    Queue-SettingsSave
 })
 $DurationBox.Add_TextChanged({
     if (-not $script:SessionRunning) {
@@ -1018,19 +1242,16 @@ $window.Add_SourceInitialized({
 })
 $window.Add_Closing({
     param($sender, $eventArgs)
-    if (-not $script:AllowExit) {
-        $eventArgs.Cancel = $true
-        $window.ShowInTaskbar = $true
-        $window.WindowState = [Windows.WindowState]::Minimized
-        return
-    }
     Save-Settings
     $timer.Stop()
     $settingsSaveTimer.Stop()
+    $trayHealthTimer.Stop()
     if ($script:PopupWindow) { $script:PopupWindow.Close() }
     $notifyIcon.Visible = $false
     $notifyIcon.Dispose()
+    $trayRecoveryWindow.Dispose()
     $appIcon.Dispose()
+    $showRequestEvent.Dispose()
     if ($mutex) { $mutex.ReleaseMutex(); $mutex.Dispose() }
 })
 

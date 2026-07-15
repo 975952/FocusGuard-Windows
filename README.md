@@ -21,7 +21,7 @@ https://github.com/975952/FocusGuard-Windows
 
 如果电脑禁用了 VBS，请双击 `启动专注守卫.cmd`，功能相同，但会保留一个命令窗口。
 
-最小化或关闭主窗口后，应用都会保留在任务栏，避免入口消失；右下角托盘图标同时作为备用入口。双击绿色托盘图标可重新打开；要完全退出，请右键托盘图标并选择“退出”。
+最小化后应用保留在任务栏；点击右上角关闭会收起窗口并继续运行，不会结束后台监测。托盘图标如果被 Windows 隐藏，不影响任务栏入口；需要完全关闭程序时，请点击主界面的“退出”按钮。
 
 `FocusGuard.ps1`、`FocusGuard.Main.xaml` 和 `FocusGuard.Reminder.xaml` 需要放在同一文件夹中。
 
@@ -46,6 +46,10 @@ https://github.com/975952/FocusGuard-Windows
 若监测遇到异常，去重后的错误信息会写入：
 
 `%APPDATA%\FocusGuardCN\focusguard.log`
+
+软件不进行语音播报。用户可以选择是否播放 Windows 系统提示音；关闭开关后完全静音。具体文案会自动组合并轮换，但始终保持用户选择的语气，不会在“温和”“直接”“暴躁”之间自动切换；最近 48 小时使用过的文案不会重复。历史仅保存在本机：
+
+`%APPDATA%\FocusGuardCN\reminder-history.json`
 
 ## 已知边界
 
