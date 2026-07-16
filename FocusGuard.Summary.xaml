@@ -1,0 +1,195 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="本轮专注分析" Width="720" Height="780" MinWidth="640" MinHeight="650"
+        WindowStartupLocation="CenterOwner" Background="#F3F6F2"
+        FontFamily="Microsoft YaHei UI" ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip" UseLayoutRounding="True">
+  <Window.Resources>
+    <Style TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#17211D"/>
+    </Style>
+    <Style x:Key="SectionCard" TargetType="Border">
+      <Setter Property="Background" Value="#FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#DDE5DF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Padding" Value="18"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style x:Key="ScoreCard" TargetType="Border">
+      <Setter Property="Background" Value="#F6F9F7"/>
+      <Setter Property="BorderBrush" Value="#E1E8E3"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="13,11"/>
+    </Style>
+    <Style x:Key="CloseButton" TargetType="Button">
+      <Setter Property="Background" Value="#167A57"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="24,11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}" CornerRadius="9"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Background" Value="#CBD4CF"/>
+          <Setter Property="Foreground" Value="#77827C"/>
+          <Setter Property="Cursor" Value="Arrow"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <Grid Margin="2,0,2,16">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Border x:Name="ScoreAccentBorder" Width="108" Height="108" CornerRadius="54"
+              Background="#DDF4E8" BorderBrush="#AEDBC7" BorderThickness="1">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock x:Name="ScoreLabel" Text="86" FontFamily="Consolas" FontSize="42"
+                     FontWeight="Bold" Foreground="#176B4D" HorizontalAlignment="Center"/>
+          <TextBlock Text="分" FontSize="11" Foreground="#4A765F" HorizontalAlignment="Center"/>
+        </StackPanel>
+      </Border>
+      <StackPanel Grid.Column="1" Margin="22,6,0,0" VerticalAlignment="Center">
+        <TextBlock Text="本轮专注分析" Foreground="#6D7A73" FontSize="12" FontWeight="SemiBold"/>
+        <TextBlock x:Name="GradeLabel" Text="A · 很稳" FontSize="25" FontWeight="Bold" Margin="0,5,0,0"/>
+        <TextBlock x:Name="VerdictLabel" Text="任务推进完整，注意力大部分时间都在计划范围内。"
+                   Foreground="#5E6D65" FontSize="12" Margin="0,7,0,0"
+                   TextWrapping="Wrap" MaxWidth="470"/>
+      </StackPanel>
+    </Grid>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="1,0,7,0">
+        <Border Background="#172C25" BorderBrush="#24483A" BorderThickness="1"
+                CornerRadius="13" Padding="18" Margin="0,0,0,12">
+          <StackPanel>
+            <TextBlock Text="本轮最关键的事" Foreground="#8FB7A5" FontSize="11" FontWeight="SemiBold"/>
+            <TextBlock x:Name="KeyInsightLabel" Text="先看最关键的结论。" Foreground="#FFFFFF" FontSize="16"
+                       FontWeight="Bold" TextWrapping="Wrap" LineHeight="24" Margin="0,7,0,0"/>
+            <TextBlock x:Name="EvidenceLabel" Text="这里会给出支撑结论的数据。" Foreground="#B8CEC4" FontSize="11"
+                       TextWrapping="Wrap" LineHeight="19" Margin="0,8,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource SectionCard}">
+          <StackPanel>
+            <TextBlock Text="评分依据 · 可核对" FontSize="15" FontWeight="Bold" Margin="0,0,0,12"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Border Grid.Column="0" Style="{StaticResource ScoreCard}">
+                <StackPanel>
+                  <TextBlock Text="专注质量" Foreground="#728078" FontSize="10"/>
+                  <TextBlock x:Name="QualityScoreLabel" Text="47 / 50" FontSize="17" FontWeight="Bold" Margin="0,4,0,0"/>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="2" Style="{StaticResource ScoreCard}">
+                <StackPanel>
+                  <TextBlock Text="完成进度" Foreground="#728078" FontSize="10"/>
+                  <TextBlock x:Name="CompletionScoreLabel" Text="30 / 30" FontSize="17" FontWeight="Bold" Margin="0,4,0,0"/>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="4" Style="{StaticResource ScoreCard}">
+                <StackPanel>
+                  <TextBlock Text="跑偏恢复" Foreground="#728078" FontSize="10"/>
+                  <TextBlock x:Name="RecoveryScoreLabel" Text="8 / 10" FontSize="17" FontWeight="Bold" Margin="0,4,0,0"/>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="6" Style="{StaticResource ScoreCard}">
+                <StackPanel>
+                  <TextBlock Text="节奏连续" Foreground="#728078" FontSize="10"/>
+                  <TextBlock x:Name="RhythmScoreLabel" Text="9 / 10" FontSize="17" FontWeight="Bold" Margin="0,4,0,0"/>
+                </StackPanel>
+              </Border>
+            </Grid>
+            <TextBlock x:Name="MetricsLabel"
+                       Text="专注范围 42 分钟 · 跑偏 2 分钟 · 无操作 1 分钟 · 提醒 1 次"
+                       Foreground="#617068" FontSize="11" TextWrapping="Wrap" Margin="0,12,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource SectionCard}" Padding="16,12">
+          <Expander Header="查看完整数据说明" Foreground="#4E5E56" FontWeight="SemiBold">
+            <TextBlock x:Name="AnalysisLabel" Foreground="#4E5E56" FontSize="11" FontWeight="Normal"
+                       TextWrapping="Wrap" LineHeight="20" Margin="0,10,0,0"/>
+          </Expander>
+        </Border>
+
+        <Border Background="#EAF4EE" BorderBrush="#D2E5D9" BorderThickness="1"
+                CornerRadius="13" Padding="18" Margin="0,0,0,12">
+          <StackPanel>
+            <TextBlock Text="下一轮建议" Foreground="#24533F" FontSize="15" FontWeight="Bold"/>
+            <TextBlock x:Name="SuggestionLabel" Foreground="#3F6654" FontSize="12"
+                       TextWrapping="Wrap" LineHeight="21" Margin="0,9,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="TellOffCard" Background="#FFF0EA" BorderBrush="#EECBBC" BorderThickness="1"
+                CornerRadius="13" Padding="18" Margin="0,0,0,12">
+          <StackPanel>
+            <TextBlock Text="没到满分，听一句" Foreground="#8B3E2C" FontSize="15" FontWeight="Bold"/>
+            <TextBlock x:Name="TellOffLabel" Foreground="#784638" FontSize="12"
+                       TextWrapping="Wrap" LineHeight="21" Margin="0,9,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="ReviewGateCard" Background="#FFF8E7" BorderBrush="#E8D59F" BorderThickness="1"
+                CornerRadius="13" Padding="18" Margin="0,0,0,12">
+          <StackPanel>
+            <TextBlock Text="复盘确认" Foreground="#795A13" FontSize="15" FontWeight="Bold"/>
+            <TextBlock Text="先看清上面的最大丢分项和下一轮建议，再完成确认。未确认的结果会在下次启动时重新出现。"
+                       Foreground="#735F2F" FontSize="11" TextWrapping="Wrap" LineHeight="19" Margin="0,7,0,11"/>
+            <CheckBox x:Name="ReviewAcknowledgeCheck"
+                      Content="我已看清本轮最大缺口，并会在下一轮执行上面的调整"
+                      Foreground="#513F18" FontSize="12" FontWeight="SemiBold"/>
+            <TextBlock x:Name="ReviewGateHint" Text="勾选后才能结束本次复盘"
+                       Foreground="#9A6C20" FontSize="10" Margin="0,7,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <TextBlock Text="评分只使用本轮时长、允许范围、无操作、提醒、恢复和暂停数据；不截屏、不读取按键内容。"
+                   Foreground="#7D8982" FontSize="10" TextWrapping="Wrap" Margin="3,0,3,5"/>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Grid Grid.Row="2" Margin="2,15,2,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <TextBlock x:Name="SessionMetaLabel" Text="2026-07-16 08:30 · 完成当前最重要的任务"
+                 Foreground="#78847E" FontSize="10" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" MaxWidth="480"/>
+      <Button Grid.Column="1" x:Name="CloseSummaryButton" Content="确认已复盘"
+              Style="{StaticResource CloseButton}" IsEnabled="False" IsDefault="True"/>
+    </Grid>
+  </Grid>
+</Window>
