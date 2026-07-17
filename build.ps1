@@ -52,10 +52,13 @@ $staging = Join-Path $distDir "FocusGuard-Windows-v$version"
 if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
 New-Item -ItemType Directory -Path $staging | Out-Null
 
-Write-Host '[3/5] 预编译原生互操作 DLL...'
+Write-Host '[3/5] 预编译原生互操作 DLL 与启动画面...'
 $nativeSource = Get-Content -LiteralPath (Join-Path $root 'FocusGuard.Native.cs') -Raw -Encoding UTF8
 Add-Type -TypeDefinition $nativeSource -ReferencedAssemblies 'System.Windows.Forms.dll' `
     -OutputAssembly (Join-Path $staging 'FocusGuard.Native.dll') -OutputType Library
+$splashSource = Get-Content -LiteralPath (Join-Path $root 'FocusGuard.Splash.cs') -Raw -Encoding UTF8
+Add-Type -TypeDefinition $splashSource -ReferencedAssemblies @('PresentationFramework', 'PresentationCore', 'WindowsBase', 'System.Xaml') `
+    -OutputAssembly (Join-Path $staging 'FocusGuard.Splash.exe') -OutputType WindowsApplication
 
 Write-Host '[4/5] 合并脚本并编译 exe...'
 # 合并入口与四个分部为单一脚本（ps2exe 只接受单文件）；exe 启动时跳过入口的逐文件语法预检。
@@ -102,6 +105,7 @@ $files = @(
     'FocusGuard.Session.ps1',
     'FocusGuard.App.ps1',
     'FocusGuard.Native.cs',
+    'FocusGuard.Splash.cs',
     'FocusGuard.Main.xaml',
     'FocusGuard.Reminder.xaml',
     'FocusGuard.Summary.xaml',

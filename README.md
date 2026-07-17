@@ -17,7 +17,7 @@ https://github.com/975952/FocusGuard-Windows
 
 普通用户可前往 GitHub 的 **Releases** 页面下载 ZIP，完整解压后再启动。
 
-双击 `FocusGuard.exe` 即可启动：单文件入口，带应用图标，不显示命令窗口；原生互操作已预编译为 `FocusGuard.Native.dll`，启动开销更小。
+双击 `FocusGuard.exe` 即可启动：单文件入口，带应用图标，不显示命令窗口；启动瞬间先显示启动画面，主界面就绪后自动接替；原生互操作已预编译为 `FocusGuard.Native.dll`，启动开销更小。
 
 也可以双击 `启动专注守卫.vbs`，它会优先安静启动 exe（目录中没有 exe 时自动回退到 PowerShell 脚本）；`启动专注守卫.cmd` 功能相同，供 VBS 被禁用时使用。
 
@@ -94,6 +94,6 @@ https://github.com/975952/FocusGuard-Windows
 
 - 自检（语法 + 核心逻辑冒烟）：`powershell -NoProfile -STA -File FocusGuard.ps1 -SelfTest`
 - 单元测试（需要 Pester 5.x+）：`Invoke-Pester -Path .\tests`
-- 打包发布：运行 `build.ps1`，依次完成自检、单元测试、预编译原生互操作（`FocusGuard.Native.cs` → `FocusGuard.Native.dll`）、合并脚本并用 ps2exe 编译出 `FocusGuard.exe`（需要 `Install-Module ps2exe -Scope CurrentUser`），最后在 `dist` 中生成 `FocusGuard-Windows-v<版本>.zip`。版本号取自 `FocusGuard.Core.ps1` 顶部的 `$script:FocusGuardVersion`，同时会显示在主窗口标题栏。
+- 打包发布：运行 `build.ps1`，依次完成自检、单元测试、预编译原生互操作（`FocusGuard.Native.cs` → `FocusGuard.Native.dll`）与启动画面（`FocusGuard.Splash.cs` → `FocusGuard.Splash.exe`）、合并脚本并用 ps2exe 编译出 `FocusGuard.exe`（需要 `Install-Module ps2exe -Scope CurrentUser`），最后在 `dist` 中生成 `FocusGuard-Windows-v<版本>.zip`。版本号取自 `FocusGuard.Core.ps1` 顶部的 `$script:FocusGuardVersion`，同时会显示在主窗口标题栏。
 - 运行时优先加载同目录的 `FocusGuard.Native.dll`；没有该 DLL 时自动从 `FocusGuard.Native.cs` 即时编译，因此克隆仓库后无需构建即可直接运行源码。
 - 每次推送由 GitHub Actions 运行自检、PSScriptAnalyzer（错误级别）和单元测试，配置见 `.github/workflows/ci.yml`。

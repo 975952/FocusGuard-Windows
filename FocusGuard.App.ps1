@@ -361,5 +361,10 @@ if ($StartMinimized) {
     $window.WindowState = [Windows.WindowState]::Minimized
     $window.ShowInTaskbar = $true
 }
+if ($null -ne $script:SplashCloseEvent) {
+    $window.Add_ContentRendered({
+        try { [void]$script:SplashCloseEvent.Set() } catch {}
+    }.GetNewClosure())
+}
 Start-WindowEntrance -Window $window -OffsetY 12 -DurationMs 280
 [void]$window.ShowDialog()

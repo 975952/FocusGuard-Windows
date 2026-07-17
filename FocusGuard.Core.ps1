@@ -1,6 +1,20 @@
 ﻿Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
-$script:FocusGuardVersion = '1.4.7'
+$script:FocusGuardVersion = '1.4.8'
+
+# 启动画面：打包环境中存在 FocusGuard.Splash.exe 时立即显示，主窗口渲染完成后关闭。
+# 自检与开机最小化启动不显示。
+$script:SplashCloseEvent = $null
+$selfTestVar = Get-Variable -Name 'SelfTest' -ErrorAction SilentlyContinue
+$startMinVar = Get-Variable -Name 'StartMinimized' -ErrorAction SilentlyContinue
+$splashAllowed = ($null -eq $selfTestVar -or -not $selfTestVar.Value) -and ($null -eq $startMinVar -or -not $startMinVar.Value)
+if ($splashAllowed) {
+    $splashExePath = Join-Path $PSScriptRoot 'FocusGuard.Splash.exe'
+    if (Test-Path -LiteralPath $splashExePath) {
+        $script:SplashCloseEvent = New-Object System.Threading.EventWaitHandle($false, [System.Threading.EventResetMode]::ManualReset, 'Local\FocusGuardCN_SplashClose')
+        [void](Start-Process -FilePath $splashExePath -PassThru)
+    }
+}
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
