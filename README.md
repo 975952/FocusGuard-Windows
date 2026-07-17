@@ -17,15 +17,15 @@ https://github.com/975952/FocusGuard-Windows
 
 普通用户可前往 GitHub 的 **Releases** 页面下载 ZIP，完整解压后再启动。
 
-双击 `启动专注守卫.vbs`。它会安静地在后台启动，不显示命令窗口。
+双击 `FocusGuard.exe` 即可启动：单文件入口，带应用图标，不显示命令窗口；原生互操作已预编译为 `FocusGuard.Native.dll`，启动开销更小。
 
-如果电脑禁用了 VBS，请双击 `启动专注守卫.cmd`，功能相同，但会保留一个命令窗口。
+也可以双击 `启动专注守卫.vbs`，它会优先安静启动 exe（目录中没有 exe 时自动回退到 PowerShell 脚本）；`启动专注守卫.cmd` 功能相同，供 VBS 被禁用时使用。
 
 最小化后应用会保留在任务栏并继续运行；点击右上角关闭、任务栏“关闭窗口”或按 `Alt+F4` 都会完全退出。需要后台继续监测时，请使用主界面的“最小化”按钮。
 
 可在“应用选项”中开启“随 Windows 启动”。它只写入当前用户启动项，不需要管理员权限；下次登录后会以最小化状态运行，不会主动弹出旧复盘，直到你打开主窗口。
 
-`FocusGuard.ps1`、`FocusGuard.Core.ps1`、`FocusGuard.Data.ps1`、`FocusGuard.Session.ps1`、`FocusGuard.App.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Summary.xaml`、`FocusGuard.History.xaml` 和 `FocusGuard.Styles.xaml` 需要放在同一文件夹中。
+`FocusGuard.exe`、`FocusGuard.Native.dll`、`FocusGuard.ps1`、`FocusGuard.Core.ps1`、`FocusGuard.Data.ps1`、`FocusGuard.Session.ps1`、`FocusGuard.App.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Summary.xaml`、`FocusGuard.History.xaml` 和 `FocusGuard.Styles.xaml` 需要放在同一文件夹中。
 
 ## 最好用的设置方式
 
@@ -94,5 +94,6 @@ https://github.com/975952/FocusGuard-Windows
 
 - 自检（语法 + 核心逻辑冒烟）：`powershell -NoProfile -STA -File FocusGuard.ps1 -SelfTest`
 - 单元测试（需要 Pester 5.x+）：`Invoke-Pester -Path .\tests`
-- 打包发布：运行 `build.ps1`，依次完成自检与单元测试，并在 `dist` 中生成 `FocusGuard-Windows-v<版本>.zip`。版本号取自 `FocusGuard.Core.ps1` 顶部的 `$script:FocusGuardVersion`，同时会显示在主窗口标题栏。
+- 打包发布：运行 `build.ps1`，依次完成自检、单元测试、预编译原生互操作（`FocusGuard.Native.cs` → `FocusGuard.Native.dll`）、合并脚本并用 ps2exe 编译出 `FocusGuard.exe`（需要 `Install-Module ps2exe -Scope CurrentUser`），最后在 `dist` 中生成 `FocusGuard-Windows-v<版本>.zip`。版本号取自 `FocusGuard.Core.ps1` 顶部的 `$script:FocusGuardVersion`，同时会显示在主窗口标题栏。
+- 运行时优先加载同目录的 `FocusGuard.Native.dll`；没有该 DLL 时自动从 `FocusGuard.Native.cs` 即时编译，因此克隆仓库后无需构建即可直接运行源码。
 - 每次推送由 GitHub Actions 运行自检、PSScriptAnalyzer（错误级别）和单元测试，配置见 `.github/workflows/ci.yml`。
