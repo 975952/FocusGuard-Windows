@@ -1,4 +1,35 @@
-﻿function Write-AppLog {
+﻿# --- 启动初始化：单实例互斥、进程身份、应用图标、数据文件路径（必须先于窗口创建） ---
+$showRequestEventName = 'Local' + [char]92 + 'FocusGuardCN_ShowWindow'
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, 'Local\FocusGuardCN_SingleInstance', [ref]$createdNew)
+if (-not $createdNew) {
+    if (-not $StartMinimized) {
+        try {
+            $existingShowEvent = [System.Threading.EventWaitHandle]::OpenExisting($showRequestEventName)
+            [void]$existingShowEvent.Set()
+            $existingShowEvent.Dispose()
+        } catch {
+            [System.Windows.MessageBox]::Show('专注守卫正在后台运行，请稍后再启动一次以恢复窗口。', '专注守卫') | Out-Null
+        }
+    }
+    exit 0
+}
+
+[void][FocusGuardNative]::SetCurrentProcessExplicitAppUserModelID('FocusGuardCN.Desktop')
+$appIcon = New-FocusGuardIcon
+$showRequestEvent = [System.Threading.EventWaitHandle]::new(
+    $false,
+    [System.Threading.EventResetMode]::AutoReset,
+    $showRequestEventName
+)
+
+$settingsDirectory = Join-Path $env:APPDATA 'FocusGuardCN'
+$settingsPath = Join-Path $settingsDirectory 'settings.json'
+$logPath = Join-Path $settingsDirectory 'focusguard.log'
+$reminderHistoryPath = Join-Path $settingsDirectory 'reminder-history.json'
+$sessionHistoryPath = Join-Path $settingsDirectory 'session-history.json'
+
+function Write-AppLog {
     param([string]$Message)
     try {
         if (-not (Test-Path -LiteralPath $settingsDirectory)) {
@@ -90,6 +121,7 @@ $window.Icon = [System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon(
 $window.Icon.Freeze()
 $taskbarInfo = New-Object Windows.Shell.TaskbarItemInfo
 $window.TaskbarItemInfo = $taskbarInfo
+$window.Title = "专注守卫 v$script:FocusGuardVersion"
 
 $TaskBox = Find-Control $window 'TaskBox'
 $DurationBox = Find-Control $window 'DurationBox'
@@ -267,7 +299,6 @@ function Load-Settings {
 function Set-StatusVisual {
     param([string]$Text, [string]$Color)
     $StatusBadge.Text = $Text
-    $StatusDot.Fill = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString($Color))
     $palette = switch ($Text) {
         '正在守卫' { @('#DDF4E8', '#176B4D') }
         '已暂停' { @('#F8ECD4', '#8A621C') }
@@ -275,8 +306,9 @@ function Set-StatusVisual {
         '本轮完成' { @('#DDF4E8', '#176B4D') }
         default { @('#E7ECE8', '#53605A') }
     }
-    $StatusBadgeContainer.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString($palette[0]))
-    $StatusBadge.Foreground = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString($palette[1]))
+    Set-BrushColorAnimated $StatusDot.Fill $Color
+    Set-BrushColorAnimated $StatusBadgeContainer.Background $palette[0]
+    Set-BrushColorAnimated $StatusBadge.Foreground $palette[1]
     if ($null -ne $notifyIcon) {
         try { $notifyIcon.Text = "专注守卫 · $Text" } catch { }
     }
@@ -402,7 +434,7 @@ function Show-SessionSummary {
     $SessionMetaLabel = Find-Control $summary 'SessionMetaLabel'
     $CloseSummaryButton = Find-Control $summary 'CloseSummaryButton'
 
-    $ScoreLabel.Text = [string]$Evaluation.Score
+    $ScoreLabel.Text = '0'
     $GradeLabel.Text = [string]$Evaluation.Grade
     $VerdictLabel.Text = [string]$Evaluation.Verdict
     $QualityScoreLabel.Text = "$($Evaluation.QualityPoints) / 50"
@@ -477,6 +509,17 @@ function Show-SessionSummary {
             }
             Save-SessionHistory
         }
+    })
+    Start-WindowEntrance -Window $summary -OffsetY 14 -DurationMs 280
+    $borderScale = New-Object Windows.Media.ScaleTransform(0.85, 0.85)
+    $ScoreAccentBorder.RenderTransform = $borderScale
+    $ScoreAccentBorder.RenderTransformOrigin = New-Object Windows.Point(0.5, 0.5)
+    $summary.Add_ContentRendered({
+        Start-TextCountUp -TextBlock $ScoreLabel -Target ([int]$Evaluation.Score)
+        $popAnimation = New-Object Windows.Media.Animation.DoubleAnimation(0.85, 1.0, [TimeSpan]::FromMilliseconds(320))
+        $popAnimation.EasingFunction = New-Object Windows.Media.Animation.BackEase -Property @{ EasingMode = 'EaseOut'; Amplitude = 0.5 }
+        $borderScale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleXProperty, $popAnimation)
+        $borderScale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleYProperty, $popAnimation)
     })
     $CloseSummaryButton.Add_Click({ $summary.Close() })
 

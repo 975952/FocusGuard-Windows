@@ -7,6 +7,7 @@
     $history = Convert-XamlToWindow -Xaml $HistoryXaml
     $history.Owner = $window
     $history.Icon = $window.Icon
+    Start-WindowEntrance -Window $history -OffsetY 14 -DurationMs 280
     $history.Width = $script:HistoryWindowWidth
     $history.Height = $script:HistoryWindowHeight
     $AccountabilityHeadline = Find-Control $history 'AccountabilityHeadline'
@@ -77,6 +78,7 @@
         $LongTermInsightLabel.Text = [string]$overview.LongTermInsight
         $ReviewStatusLabel.Text = [string]$overview.ReviewStatus
         $TrendBarsPanel.Children.Clear()
+        $barIndex = 0
         foreach ($record in @($overview.RecentRecords)) {
             $score = [int](Get-ObjectPropertyValue $record 'Score' 0)
             $column = New-Object Windows.Controls.StackPanel
@@ -92,12 +94,17 @@
             $barHost.Margin = New-Object Windows.Thickness(0, 4, 0, 5)
             $bar = New-Object Windows.Controls.Border
             $bar.Width = 18
-            $bar.Height = [Math]::Max(4, [Math]::Min(88, $score * 0.88))
+            $barTargetHeight = [Math]::Max(4, [Math]::Min(88, $score * 0.88))
+            $bar.Height = 0
             $bar.VerticalAlignment = 'Bottom'
             $bar.CornerRadius = New-Object Windows.CornerRadius(4, 4, 1, 1)
             $barColor = if ($score -ge 90) { '#2FA875' } elseif ($score -ge 70) { '#D5A13C' } else { '#D06A4F' }
             $bar.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString($barColor))
             $bar.ToolTip = "$score 分 · $(Get-ObjectPropertyValue $record 'Task' '未命名任务')"
+            $barGrow = New-EaseOutAnimation -From 0 -To $barTargetHeight -DurationMs 380
+            $barGrow.BeginTime = [TimeSpan]::FromMilliseconds($barIndex * 45)
+            $bar.BeginAnimation([Windows.FrameworkElement]::HeightProperty, $barGrow)
+            $barIndex++
             [void]$barHost.Children.Add($bar)
             [void]$column.Children.Add($barHost)
             $dateText = New-Object Windows.Controls.TextBlock
@@ -132,7 +139,11 @@
             $cell.Margin = New-Object Windows.Thickness(2)
             $cell.CornerRadius = New-Object Windows.CornerRadius(3)
             $cell.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString($colors[[int]$day.Level]))
-            $cell.Opacity = if ([bool]$day.IsFuture) { 0.28 } else { 1.0 }
+            $cellOpacity = if ([bool]$day.IsFuture) { 0.28 } else { 1.0 }
+            $cell.Opacity = 0
+            $cellFade = New-Object Windows.Media.Animation.DoubleAnimation(0, $cellOpacity, [TimeSpan]::FromMilliseconds(240))
+            $cellFade.BeginTime = [TimeSpan]::FromMilliseconds([Math]::Min(700, $dayIndex * 5))
+            $cell.BeginAnimation([Windows.UIElement]::OpacityProperty, $cellFade)
             $cell.ToolTip = if ([bool]$day.IsFuture) {
                 $day.Date.ToString('yyyy-MM-dd')
             } elseif ([int]$day.Sessions -eq 0) {
@@ -173,8 +184,7 @@
     $HistoryList.Add_SelectionChanged({ $ViewSelectedButton.IsEnabled = $null -ne $HistoryList.SelectedItem })
     $HistoryList.Add_MouseDoubleClick($openSelected)
     $HistoryPaneSplitter.Add_MouseDoubleClick({
-        $HistoryInsightColumn.Width = New-Object Windows.GridLength 380
-        $history.UpdateLayout()
+        Start-ColumnWidthAnimation -Column $HistoryInsightColumn -Target 380
         $script:HistoryInsightWidth = 380
     })
     $ViewSelectedButton.Add_Click($openSelected)
@@ -306,6 +316,8 @@ function Show-Reminder {
     }
     $AlertMessage.Text = Get-AlertCopy -Reason $Reason
 
+    Start-WindowEntrance -Window $popup -OffsetY 22 -DurationMs 300 -Pop
+
     $popup.Add_ContentRendered({
         $popup.Activate() | Out-Null
         $popup.Focus() | Out-Null
@@ -373,7 +385,7 @@ function Start-Session {
     $CurrentTaskLabel.Text = $TaskBox.Text.Trim()
     $window.Title = "专注中 · $($TaskBox.Text.Trim())"
     $CountdownLabel.Text = '{0:00}:00' -f $duration
-    $SessionProgress.Value = 0
+    Reset-ProgressValue -ProgressBar $SessionProgress
     $taskbarInfo.ProgressValue = 0
     $taskbarInfo.ProgressState = [Windows.Shell.TaskbarItemProgressState]::Normal
     $TaskBox.IsEnabled = $false
@@ -454,7 +466,7 @@ function Stop-Session {
     $script:BreakStartedAt = $null
     $script:SessionLastSampleAt = $null
     $script:OffTaskSince = $null
-    $window.Title = '专注守卫'
+    $window.Title = "专注守卫 v$script:FocusGuardVersion"
     $TaskBox.IsEnabled = $true
     $DurationBox.IsEnabled = $true
     $Duration25Button.IsEnabled = $true
@@ -467,7 +479,7 @@ function Stop-Session {
     $taskbarInfo.ProgressState = [Windows.Shell.TaskbarItemProgressState]::None
     Sync-ActionState
     $CountdownLabel.Text = "$($evaluation.Score) 分"
-    $SessionProgress.Value = $evaluation.Score
+    Set-ProgressValue -ProgressBar $SessionProgress -Target ([double]$evaluation.Score) -DurationMs 600
     $PhaseLabel.Text = "本轮评分 · $($evaluation.Grade)"
     if ($Completed) {
         $MonitorLabel.Text = '本轮时长已完成；点击“历史汇总”查看长期表现'
@@ -493,9 +505,11 @@ function Show-PendingReviewIfNeeded {
 }
 
 function Show-MainWindow {
+    $wasHidden = -not $window.IsVisible -or $window.WindowState -eq [Windows.WindowState]::Minimized
     $window.ShowInTaskbar = $true
     $window.Show()
     $window.WindowState = [Windows.WindowState]::Normal
+    if ($wasHidden) { Start-WindowEntrance -Window $window -OffsetY 8 -DurationMs 200 -Immediate }
     [void]$window.Activate()
     Show-PendingReviewIfNeeded
 }

@@ -1,5 +1,6 @@
 ﻿Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+$script:FocusGuardVersion = '1.4.7'
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -104,10 +105,20 @@ if (Test-Path -LiteralPath $historyXamlPath) {
     [xml]$HistoryXaml = Get-Content -LiteralPath $historyXamlPath -Raw -Encoding UTF8
 }
 
+$script:SharedStyleDictionary = $null
+$stylesXamlPath = Join-Path $PSScriptRoot 'FocusGuard.Styles.xaml'
+if (Test-Path -LiteralPath $stylesXamlPath) {
+    $script:SharedStyleDictionary = [Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath $stylesXamlPath -Raw -Encoding UTF8))
+}
+
 function Convert-XamlToWindow {
     param([xml]$Xaml)
     $reader = New-Object System.Xml.XmlNodeReader $Xaml
-    return [Windows.Markup.XamlReader]::Load($reader)
+    $loaded = [Windows.Markup.XamlReader]::Load($reader)
+    if ($null -ne $script:SharedStyleDictionary) {
+        [void]$loaded.Resources.MergedDictionaries.Add($script:SharedStyleDictionary)
+    }
+    return $loaded
 }
 
 function Find-Control {
@@ -721,13 +732,172 @@ function New-FocusGuardIcon {
     }
 }
 
-if ($SelfTest) {
+function New-EaseOutAnimation {
+    param([double]$To, [int]$DurationMs, [double]$From = [double]::NaN)
+    if ([double]::IsNaN($From)) {
+        $animation = New-Object Windows.Media.Animation.DoubleAnimation($To, [TimeSpan]::FromMilliseconds($DurationMs))
+    } else {
+        $animation = New-Object Windows.Media.Animation.DoubleAnimation($From, $To, [TimeSpan]::FromMilliseconds($DurationMs))
+    }
+    $animation.EasingFunction = New-Object Windows.Media.Animation.CubicEase -Property @{ EasingMode = 'EaseOut' }
+    return $animation
+}
+
+function Set-BrushColorAnimated {
+    param($Brush, [string]$ColorHex, [int]$DurationMs = 220)
+    if ($null -eq $Brush) { return }
+    $target = [Windows.Media.ColorConverter]::ConvertFromString($ColorHex)
+    if ($Brush.Color -eq $target) { return }
+    $from = $Brush.Color
+    $Brush.Color = $target
+    $animation = New-Object Windows.Media.Animation.ColorAnimation($from, $target, [TimeSpan]::FromMilliseconds($DurationMs))
+    $animation.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+    $Brush.BeginAnimation([Windows.Media.SolidColorBrush]::ColorProperty, $animation)
+}
+
+function Set-ProgressValue {
+    param($ProgressBar, [double]$Target, [int]$DurationMs = 450)
+    $current = [double]$ProgressBar.Value
+    if ([Math]::Abs($current - $Target) -lt 0.01) { return }
+    $ProgressBar.Value = $Target
+    $animation = New-EaseOutAnimation -From $current -To $Target -DurationMs $DurationMs
+    $animation.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+    $ProgressBar.BeginAnimation([Windows.Controls.Primitives.RangeBase]::ValueProperty, $animation)
+}
+
+function Reset-ProgressValue {
+    param($ProgressBar, [double]$Value = 0)
+    $ProgressBar.BeginAnimation([Windows.Controls.Primitives.RangeBase]::ValueProperty, $null)
+    $ProgressBar.Value = $Value
+}
+
+function Start-WindowEntrance {
+    param($Window, [double]$OffsetY = 16, [int]$DurationMs = 260, [switch]$Pop, [switch]$Immediate)
+    # Window 不支持 RenderTransform，位移/缩放施加在根内容元素上
+    $root = $Window.Content -as [Windows.UIElement]
+    $transform = $null
+    $scale = $null
+    $translate = $null
+    if ($null -ne $root) {
+        $transform = New-Object Windows.Media.TransformGroup
+        $scale = New-Object Windows.Media.ScaleTransform(1, 1)
+        $translate = New-Object Windows.Media.TranslateTransform(0, $OffsetY)
+        [void]$transform.Children.Add($scale)
+        [void]$transform.Children.Add($translate)
+        $root.RenderTransform = $transform
+        $root.RenderTransformOrigin = New-Object Windows.Point(0.5, 0.5)
+    }
+    $Window.Opacity = 0
+    $duration = [TimeSpan]::FromMilliseconds($DurationMs)
+    $fade = New-EaseOutAnimation -From 0 -To 1 -DurationMs $DurationMs
+    $rise = New-EaseOutAnimation -From $OffsetY -To 0 -DurationMs $DurationMs
+    $scaleAnimation = $null
+    if ($Pop -and $null -ne $scale) {
+        $scale.ScaleX = 0.96
+        $scale.ScaleY = 0.96
+        $scaleAnimation = New-Object Windows.Media.Animation.DoubleAnimation(0.96, 1.0, $duration)
+        $scaleAnimation.EasingFunction = New-Object Windows.Media.Animation.BackEase -Property @{ EasingMode = 'EaseOut'; Amplitude = 0.4 }
+    }
+    $begin = {
+        $Window.BeginAnimation([Windows.UIElement]::OpacityProperty, $fade)
+        if ($null -ne $translate) {
+            $translate.BeginAnimation([Windows.Media.TranslateTransform]::YProperty, $rise)
+        }
+        if ($null -ne $scaleAnimation) {
+            $scale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleXProperty, $scaleAnimation)
+            $scale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleYProperty, $scaleAnimation)
+        }
+    }.GetNewClosure()
+    if ($Immediate) {
+        & $begin
+    } else {
+        $Window.Add_ContentRendered($begin)
+    }
+}
+
+function Start-ColumnWidthAnimation {
+    param($Column, [double]$Target, [int]$DurationMs = 260)
+    $start = [double]$Column.ActualWidth
+    if ([Math]::Abs($start - $Target) -lt 2) {
+        $Column.Width = New-Object Windows.GridLength $Target
+        return
+    }
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $animationTimer = New-Object Windows.Threading.DispatcherTimer
+    $animationTimer.Interval = [TimeSpan]::FromMilliseconds(15)
+    $tick = {
+        $elapsed = [Math]::Min(1.0, $stopwatch.ElapsedMilliseconds / [double]$DurationMs)
+        $eased = 1.0 - [Math]::Pow(1.0 - $elapsed, 3)
+        $Column.Width = New-Object Windows.GridLength ($start + ($Target - $start) * $eased)
+        if ($elapsed -ge 1.0) { $animationTimer.Stop() }
+    }.GetNewClosure()
+    $animationTimer.Add_Tick($tick)
+    $animationTimer.Start()
+}
+
+function Start-WindowSizeAnimation {
+    param($Window, [double]$TargetWidth, [double]$TargetHeight, [int]$DurationMs = 300)
+    if ([double]::IsNaN($Window.Width) -or [double]::IsNaN($Window.Height)) {
+        $Window.Width = $TargetWidth
+        $Window.Height = $TargetHeight
+        return
+    }
+    $fromWidth = [double]$Window.Width
+    $fromHeight = [double]$Window.Height
+    $Window.Width = $TargetWidth
+    $Window.Height = $TargetHeight
+    $ease = New-Object Windows.Media.Animation.CubicEase -Property @{ EasingMode = 'EaseInOut' }
+    $widthAnimation = New-Object Windows.Media.Animation.DoubleAnimation($fromWidth, $TargetWidth, [TimeSpan]::FromMilliseconds($DurationMs))
+    $widthAnimation.EasingFunction = $ease
+    $widthAnimation.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+    $heightAnimation = New-Object Windows.Media.Animation.DoubleAnimation($fromHeight, $TargetHeight, [TimeSpan]::FromMilliseconds($DurationMs))
+    $heightAnimation.EasingFunction = $ease
+    $heightAnimation.FillBehavior = [Windows.Media.Animation.FillBehavior]::Stop
+    $Window.BeginAnimation([Windows.Window]::WidthProperty, $widthAnimation)
+    $Window.BeginAnimation([Windows.Window]::HeightProperty, $heightAnimation)
+}
+
+function Start-TextCountUp {
+    param($TextBlock, [int]$Target, [int]$DurationMs = 550)
+    if ($Target -le 0) {
+        $TextBlock.Text = [string]$Target
+        return
+    }
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $countTimer = New-Object Windows.Threading.DispatcherTimer
+    $countTimer.Interval = [TimeSpan]::FromMilliseconds(33)
+    $tick = {
+        $elapsed = [Math]::Min(1.0, $stopwatch.ElapsedMilliseconds / [double]$DurationMs)
+        $eased = 1.0 - [Math]::Pow(1.0 - $elapsed, 3)
+        $TextBlock.Text = [string][int][Math]::Round($Target * $eased)
+        if ($elapsed -ge 1.0) {
+            $TextBlock.Text = [string]$Target
+            $countTimer.Stop()
+        }
+    }.GetNewClosure()
+    $countTimer.Add_Tick($tick)
+    $countTimer.Start()
+}
+
+function Invoke-FocusGuardSelfTest {
     $mainTest = Convert-XamlToWindow -Xaml $MainXaml
     $reminderTest = Convert-XamlToWindow -Xaml $ReminderXaml
     if ($null -eq $SummaryXaml) { throw '缺少 FocusGuard.Summary.xaml' }
     $summaryTest = Convert-XamlToWindow -Xaml $SummaryXaml
     if ($null -eq $HistoryXaml) { throw '缺少 FocusGuard.History.xaml' }
     $historyTest = Convert-XamlToWindow -Xaml $HistoryXaml
+    if ($null -eq $script:SharedStyleDictionary) { throw '缺少共享样式 FocusGuard.Styles.xaml' }
+    if ($null -eq $mainTest.TryFindResource([Windows.Controls.Primitives.ScrollBar])) { throw '共享滚动条样式未合并到主窗口' }
+    $easeTest = New-EaseOutAnimation -From 0 -To 1 -DurationMs 100
+    if ($null -eq $easeTest.EasingFunction) { throw '动画辅助函数异常' }
+    Start-WindowEntrance -Window $mainTest -Immediate
+    Start-WindowEntrance -Window $reminderTest -Pop -Immediate
+    if ($null -eq ($mainTest.Content.RenderTransform)) { throw '窗口入场动画未施加到根内容元素' }
+    foreach ($xamlDoc in @($MainXaml, $ReminderXaml, $SummaryXaml, $HistoryXaml)) {
+        if ($null -ne $xamlDoc -and $xamlDoc.OuterXml -match 'FillBehavior="Stop"') { throw 'XAML 交互态动画禁止使用 FillBehavior=Stop（播完弹回导致闪烁）' }
+    }
+    $stylesRaw = Get-Content -LiteralPath $stylesXamlPath -Raw -Encoding UTF8
+    if ($stylesRaw -match 'FillBehavior="Stop"') { throw '共享样式禁止使用 FillBehavior=Stop（播完弹回导致闪烁）' }
     if (-not (Find-Control $mainTest 'StartButton')) { throw '主窗口缺少 StartButton' }
     if (-not (Find-Control $mainTest 'SessionProgress')) { throw '主窗口缺少 SessionProgress' }
     if (-not (Find-Control $mainTest 'Duration25Button')) { throw '主窗口缺少快捷时长按钮' }
@@ -789,41 +959,11 @@ if ($SelfTest) {
     $historyJson = ConvertTo-Json -InputObject @($historyOverview.RecentRecords) -Depth 6
     $historyParsed = $historyJson | ConvertFrom-Json
     if (@($historyParsed).Count -ne 3) { throw '历史 JSON 数组往返测试失败' }
+    if ($script:FocusGuardVersion -notmatch '^\d+\.\d+\.\d+$') { throw '版本号格式异常' }
     $idle = [FocusGuardNative]::IdleSeconds()
     Write-Output "FocusGuard self-test passed. IdleSeconds=$([Math]::Round($idle, 1))"
     $mainTest.Close()
     $reminderTest.Close()
     $summaryTest.Close()
     $historyTest.Close()
-    exit 0
 }
-
-$showRequestEventName = 'Local' + [char]92 + 'FocusGuardCN_ShowWindow'
-$createdNew = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Local\FocusGuardCN_SingleInstance', [ref]$createdNew)
-if (-not $createdNew) {
-    if (-not $StartMinimized) {
-        try {
-            $existingShowEvent = [System.Threading.EventWaitHandle]::OpenExisting($showRequestEventName)
-            [void]$existingShowEvent.Set()
-            $existingShowEvent.Dispose()
-        } catch {
-            [System.Windows.MessageBox]::Show('专注守卫正在后台运行，请稍后再启动一次以恢复窗口。', '专注守卫') | Out-Null
-        }
-    }
-    exit 0
-}
-
-[void][FocusGuardNative]::SetCurrentProcessExplicitAppUserModelID('FocusGuardCN.Desktop')
-$appIcon = New-FocusGuardIcon
-$showRequestEvent = [System.Threading.EventWaitHandle]::new(
-    $false,
-    [System.Threading.EventResetMode]::AutoReset,
-    $showRequestEventName
-)
-
-$settingsDirectory = Join-Path $env:APPDATA 'FocusGuardCN'
-$settingsPath = Join-Path $settingsDirectory 'settings.json'
-$logPath = Join-Path $settingsDirectory 'focusguard.log'
-$reminderHistoryPath = Join-Path $settingsDirectory 'reminder-history.json'
-$sessionHistoryPath = Join-Path $settingsDirectory 'session-history.json'

@@ -25,7 +25,7 @@ https://github.com/975952/FocusGuard-Windows
 
 可在“应用选项”中开启“随 Windows 启动”。它只写入当前用户启动项，不需要管理员权限；下次登录后会以最小化状态运行，不会主动弹出旧复盘，直到你打开主窗口。
 
-`FocusGuard.ps1`、`FocusGuard.Part1.ps1` 至 `FocusGuard.Part4.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Summary.xaml` 和 `FocusGuard.History.xaml` 需要放在同一文件夹中。
+`FocusGuard.ps1`、`FocusGuard.Core.ps1`、`FocusGuard.Data.ps1`、`FocusGuard.Session.ps1`、`FocusGuard.App.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Summary.xaml`、`FocusGuard.History.xaml` 和 `FocusGuard.Styles.xaml` 需要放在同一文件夹中。
 
 ## 最好用的设置方式
 
@@ -89,3 +89,10 @@ https://github.com/975952/FocusGuard-Windows
 - 某些应用不会提供有意义的窗口标题，需要按进程名放行。
 - 阅读纸质材料或长时间看屏幕时可能被判定为“无操作”，可把无操作阈值调高。
 - 这是行为提醒工具，不是无法绕过的系统封锁软件；你始终可以暂停或退出。
+
+## 开发与构建
+
+- 自检（语法 + 核心逻辑冒烟）：`powershell -NoProfile -STA -File FocusGuard.ps1 -SelfTest`
+- 单元测试（需要 Pester 5.x+）：`Invoke-Pester -Path .\tests`
+- 打包发布：运行 `build.ps1`，依次完成自检与单元测试，并在 `dist` 中生成 `FocusGuard-Windows-v<版本>.zip`。版本号取自 `FocusGuard.Core.ps1` 顶部的 `$script:FocusGuardVersion`，同时会显示在主窗口标题栏。
+- 每次推送由 GitHub Actions 运行自检、PSScriptAnalyzer（错误级别）和单元测试，配置见 `.github/workflows/ci.yml`。

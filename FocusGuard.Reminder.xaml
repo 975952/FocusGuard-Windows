@@ -5,6 +5,45 @@
         ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent"
         FontFamily="Microsoft YaHei UI" UseLayoutRounding="True">
+  <Window.Resources>
+    <Style x:Key="AlertButton" TargetType="Button">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="9" Padding="{TemplateBinding Padding}" RenderTransformOrigin="0.5,0.5">
+              <Border.RenderTransform>
+                <ScaleTransform x:Name="ButtonScale" ScaleX="1" ScaleY="1"/>
+              </Border.RenderTransform>
+              <Grid>
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border x:Name="ShadeLayer" Background="#0B1F17" Opacity="0"
+                        CornerRadius="8" IsHitTestVisible="False"/>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="ShadeLayer" Property="Opacity" Value="0.08"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="ShadeLayer" Property="Opacity" Value="0.22"/>
+                <Setter TargetName="ButtonBorder" Property="RenderTransform">
+                  <Setter.Value>
+                    <ScaleTransform ScaleX="0.96" ScaleY="0.96"/>
+                  </Setter.Value>
+                </Setter>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.38"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <Border Background="#FBFCF9" BorderBrush="#183A2D" BorderThickness="2"
           CornerRadius="20" Padding="32">
     <Border.Effect>
@@ -50,11 +89,11 @@
         <TextBlock Text="Enter 返回 · Esc 休息" Foreground="#919B96"
                    FontSize="10" VerticalAlignment="Center"/>
         <StackPanel Grid.Column="1" Orientation="Horizontal">
-          <Button x:Name="BreakButton" Content="休息 5 分钟"
+          <Button x:Name="BreakButton" Content="休息 5 分钟" Style="{StaticResource AlertButton}"
                   Background="#E8EFEA" Foreground="#2A473B"
                   BorderBrush="#D4DED7" BorderThickness="1"
                   Padding="17,10" FontWeight="SemiBold" Cursor="Hand" IsCancel="True"/>
-          <Button x:Name="ReturnButton" Content="现在就回来"
+          <Button x:Name="ReturnButton" Content="现在就回来" Style="{StaticResource AlertButton}"
                   Background="#167A57" Foreground="White" BorderThickness="0"
                   Padding="21,11" FontWeight="SemiBold" Margin="10,0,0,0"
                   Cursor="Hand" IsDefault="True"/>

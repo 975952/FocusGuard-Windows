@@ -41,7 +41,7 @@
     }
     $CountdownLabel.Text = '{0:00}:{1:00}' -f [Math]::Floor($remaining.TotalMinutes), $remaining.Seconds
     $progress = [Math]::Min(100, [Math]::Max(0, (1 - ($remaining.TotalSeconds / $script:SessionDurationSeconds)) * 100))
-    $SessionProgress.Value = $progress
+    Set-ProgressValue -ProgressBar $SessionProgress -Target $progress
     $taskbarInfo.ProgressValue = $progress / 100.0
     $focusedSeconds = [Math]::Max(0, ($now - $script:StartedAt).TotalSeconds - $script:TotalPausedSeconds)
     $FocusedTimeLabel.Text = "$([Math]::Floor($focusedSeconds / 60)) 分钟"
@@ -320,19 +320,16 @@ $StartWithWindowsCheck.Add_Click({
     }
 })
 $ResetLayoutButton.Add_Click({
-    $window.Width = 1440
-    $window.Height = 920
-    $SettingsColumn.Width = New-Object Windows.GridLength 560
+    Start-WindowSizeAnimation -Window $window -TargetWidth 1440 -TargetHeight 920
+    Start-ColumnWidthAnimation -Column $SettingsColumn -Target 560
     $script:HistoryWindowWidth = 1280
     $script:HistoryWindowHeight = 960
     $script:HistoryInsightWidth = 380
-    $window.UpdateLayout()
-    Save-Settings
+    Queue-SettingsSave
     $MonitorLabel.Text = '已恢复推荐窗口与面板大小'
 })
 $MainPaneSplitter.Add_MouseDoubleClick({
-    $SettingsColumn.Width = New-Object Windows.GridLength 560
-    $window.UpdateLayout()
+    Start-ColumnWidthAnimation -Column $SettingsColumn -Target 560
     Queue-SettingsSave
     $MonitorLabel.Text = '已恢复推荐面板宽度'
 })
@@ -364,4 +361,5 @@ if ($StartMinimized) {
     $window.WindowState = [Windows.WindowState]::Minimized
     $window.ShowInTaskbar = $true
 }
+Start-WindowEntrance -Window $window -OffsetY 12 -DurationMs 280
 [void]$window.ShowDialog()

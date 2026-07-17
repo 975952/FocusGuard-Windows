@@ -1,0 +1,11 @@
+* text=auto
+
+*.ps1  text eol=crlf
+*.xaml text eol=crlf
+*.cmd  text eol=crlf
+*.md   text eol=crlf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# VBS 启动器以 UTF-16（带 BOM）保存以正确显示中文提示，按二进制处理避免行尾转换破坏编码
+*.vbs  binary
