@@ -3,7 +3,8 @@
     $snapshot = Get-ForegroundSnapshot
     $isMainWindow = $script:MainWindowHandle -ne [IntPtr]::Zero -and $snapshot.Handle -eq $script:MainWindowHandle
     $isReminderWindow = $script:PopupWindowHandle -ne [IntPtr]::Zero -and $snapshot.Handle -eq $script:PopupWindowHandle
-    $isOwnWindow = $isMainWindow -or $isReminderWindow
+    $isTabooLockWindow = $script:TabooLockWindowHandle -ne [IntPtr]::Zero -and $snapshot.Handle -eq $script:TabooLockWindowHandle
+    $isOwnWindow = $isMainWindow -or $isReminderWindow -or $isTabooLockWindow
     if (-not $isOwnWindow -and $snapshot.Title) {
         $script:LastExternalSnapshot = $snapshot
     }
@@ -55,6 +56,26 @@
         return
     }
 
+    # 绝对禁止：命中即全屏锁定，优先于普通跑偏/无操作判定；锁定期间冻结采样
+    if ($script:TabooLockOpen) { return }
+    $tabooWords = @(Get-RuleItems $TabooWordsList)
+    if ([bool]$TabooModeCheck.IsChecked -and $tabooWords.Count -gt 0 -and -not $isOwnWindow) {
+        $tabooHit = Get-TabooMatch -ProcessName $snapshot.ProcessName -Title $snapshot.Title -TabooWords $tabooWords
+        if ($null -ne $tabooHit) {
+            $MonitorLabel.Text = "检测到绝对禁止内容：$tabooHit"
+            Start-TabooStrike -Word $tabooHit -Snapshot $snapshot
+            return
+        }
+    }
+    $tabooGraceMessage = $null
+    if ($script:TabooGraceUntil) {
+        if ($now -lt $script:TabooGraceUntil) {
+            $tabooGraceMessage = "禁忌宽限期：$([Math]::Ceiling(($script:TabooGraceUntil - $now).TotalSeconds)) 秒内不要回到禁忌内容"
+        } else {
+            $script:TabooGraceUntil = $null
+        }
+    }
+
     $idleThreshold = Get-IntSetting $IdleBox 180 30 3600
     $idleSeconds = [FocusGuardNative]::IdleSeconds()
     $allowedApps = @(Get-RuleItems $AllowedAppsList)
@@ -75,7 +96,7 @@
     if ($allowed) {
         Add-SessionSample -Timestamp $now -ActivityState 'ontask'
         $script:OffTaskSince = $null
-        $MonitorLabel.Text = '在允许范围内，继续保持'
+        $MonitorLabel.Text = if ($tabooGraceMessage) { $tabooGraceMessage } else { '在允许范围内，继续保持' }
         return
     }
 
@@ -178,6 +199,7 @@ $endBreakItem.Add_Click({ End-Break })
 function Exit-Application {
     $script:AllowExit = $true
     if ($script:PopupWindow) { $script:PopupWindow.Close() }
+    if ($script:TabooLockWindow) { $script:TabooLockWindow.Close() }
     $window.Close()
 }
 
@@ -247,6 +269,27 @@ $RemoveAllowedAppButton.Add_Click({
 $RemoveAllowedTitleButton.Add_Click({
     if ((Remove-SelectedRuleItems $AllowedTitlesList) -gt 0) { Update-RuleCountLabels; Queue-SettingsSave }
 })
+$addTabooWord = {
+    if (Add-RuleItem $TabooWordsList $TabooWordInput.Text) {
+        $TabooWordInput.Clear()
+        Update-RuleCountLabels
+        Queue-SettingsSave
+    }
+}
+$AddTabooWordButton.Add_Click($addTabooWord)
+$TabooWordInput.Add_KeyDown({
+    param($sender, $eventArgs)
+    if ($eventArgs.Key -eq [Windows.Input.Key]::Return) { $eventArgs.Handled = $true; & $addTabooWord }
+})
+$RemoveTabooWordButton.Add_Click({
+    if ((Remove-SelectedRuleItems $TabooWordsList) -gt 0) { Update-RuleCountLabels; Queue-SettingsSave }
+})
+$TabooWordsList.Add_KeyDown({
+    param($sender, $eventArgs)
+    if ($eventArgs.Key -eq [Windows.Input.Key]::Delete -and (Remove-SelectedRuleItems $TabooWordsList) -gt 0) { Update-RuleCountLabels; Queue-SettingsSave }
+})
+$TabooLockBox.Add_TextChanged({ Queue-SettingsSave })
+$TabooGraceBox.Add_TextChanged({ Queue-SettingsSave })
 $AllowedAppsList.Add_KeyDown({
     param($sender, $eventArgs)
     if ($eventArgs.Key -eq [Windows.Input.Key]::Delete -and (Remove-SelectedRuleItems $AllowedAppsList) -gt 0) { Update-RuleCountLabels; Queue-SettingsSave }
@@ -303,6 +346,7 @@ $IdleBox.Add_TextChanged({ Queue-SettingsSave })
 $GraceBox.Add_TextChanged({ Queue-SettingsSave })
 $ToneBox.Add_SelectionChanged({ Queue-SettingsSave })
 $SoundCheck.Add_Click({ Queue-SettingsSave })
+$TabooModeCheck.Add_Click({ Queue-SettingsSave })
 $StartWithWindowsCheck.Add_Click({
     if ($script:AutoStartChangeInternal) { return }
     $desired = [bool]$StartWithWindowsCheck.IsChecked
@@ -335,6 +379,8 @@ $MainPaneSplitter.Add_MouseDoubleClick({
 })
 $IdleBox.Add_LostFocus({ $IdleBox.Text = [string](Get-IntSetting $IdleBox 180 30 3600) })
 $GraceBox.Add_LostFocus({ $GraceBox.Text = [string](Get-IntSetting $GraceBox 25 3 600) })
+$TabooLockBox.Add_LostFocus({ $TabooLockBox.Text = [string](Get-IntSetting $TabooLockBox 15 5 3600) })
+$TabooGraceBox.Add_LostFocus({ $TabooGraceBox.Text = [string](Get-IntSetting $TabooGraceBox 10 1 10) })
 
 $window.Add_SourceInitialized({
     $script:MainWindowHandle = (New-Object Windows.Interop.WindowInteropHelper($window)).Handle
@@ -349,6 +395,7 @@ $window.Add_Closing({
     $settingsSaveTimer.Stop()
     $trayHealthTimer.Stop()
     if ($script:PopupWindow) { $script:PopupWindow.Close() }
+    if ($script:TabooLockWindow) { $script:TabooLockCanClose = $true; $script:TabooLockWindow.Close() }
     $notifyIcon.Visible = $false
     $notifyIcon.Dispose()
     $trayRecoveryWindow.Dispose()

@@ -1,6 +1,6 @@
 ﻿Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
-$script:FocusGuardVersion = '1.4.8'
+$script:FocusGuardVersion = '1.5.0'
 
 # 启动画面：打包环境中存在 FocusGuard.Splash.exe 时立即显示，主窗口渲染完成后关闭。
 # 自检与开机最小化启动不显示。
@@ -35,12 +35,15 @@ if (Test-Path -LiteralPath $nativeDllPath) {
 
 $mainXamlPath = Join-Path $PSScriptRoot 'FocusGuard.Main.xaml'
 $reminderXamlPath = Join-Path $PSScriptRoot 'FocusGuard.Reminder.xaml'
+$tabooXamlPath = Join-Path $PSScriptRoot 'FocusGuard.Taboo.xaml'
 $summaryXamlPath = Join-Path $PSScriptRoot 'FocusGuard.Summary.xaml'
 $historyXamlPath = Join-Path $PSScriptRoot 'FocusGuard.History.xaml'
 if (-not (Test-Path -LiteralPath $mainXamlPath)) { throw '缺少 FocusGuard.Main.xaml' }
 if (-not (Test-Path -LiteralPath $reminderXamlPath)) { throw '缺少 FocusGuard.Reminder.xaml' }
+if (-not (Test-Path -LiteralPath $tabooXamlPath)) { throw '缺少 FocusGuard.Taboo.xaml' }
 [xml]$MainXaml = Get-Content -LiteralPath $mainXamlPath -Raw -Encoding UTF8
 [xml]$ReminderXaml = Get-Content -LiteralPath $reminderXamlPath -Raw -Encoding UTF8
+[xml]$TabooXaml = Get-Content -LiteralPath $tabooXamlPath -Raw -Encoding UTF8
 $SummaryXaml = $null
 if (Test-Path -LiteralPath $summaryXamlPath) {
     [xml]$SummaryXaml = Get-Content -LiteralPath $summaryXamlPath -Raw -Encoding UTF8
@@ -196,6 +199,34 @@ function Test-SnapshotAllowed {
     if ($taskLower.Length -ge 2 -and $titleLower.Contains($taskLower)) { return $true }
     if ($AllowedApps.Count -eq 0 -and $AllowedTitles.Count -eq 0) { return $true }
     return $false
+}
+
+function Get-TabooMatch {
+    param(
+        [string]$ProcessName,
+        [string]$Title,
+        [string[]]$TabooWords
+    )
+    # 与「允许范围」同一套匹配惯例：进程名去 .exe 后缀后等值比较，标题做包含匹配。
+    $processLower = $ProcessName.ToLowerInvariant()
+    $titleLower = $Title.ToLowerInvariant()
+    foreach ($word in $TabooWords) {
+        $normalized = ([string]$word).Trim().ToLowerInvariant()
+        if (-not $normalized) { continue }
+        $processWord = $normalized
+        if ($processWord.EndsWith('.exe')) { $processWord = $processWord.Substring(0, $processWord.Length - 4) }
+        if ($processWord -and $processLower -eq $processWord) { return ([string]$word).Trim() }
+        if ($titleLower.Contains($normalized)) { return ([string]$word).Trim() }
+    }
+    return $null
+}
+
+function Get-TabooLockSeconds {
+    param([int]$BaseSeconds, [int]$Strike)
+    # 锁定秒数 = 基础秒数 × 当天触发次数；基础最低 5 秒，结果上限 3600 秒。
+    $base = [Math]::Max(5, $BaseSeconds)
+    $times = [Math]::Max(1, $Strike)
+    return [Math]::Min(3600, $base * $times)
 }
 
 function Get-IntSetting {
@@ -827,6 +858,7 @@ function Start-TextCountUp {
 function Invoke-FocusGuardSelfTest {
     $mainTest = Convert-XamlToWindow -Xaml $MainXaml
     $reminderTest = Convert-XamlToWindow -Xaml $ReminderXaml
+    $tabooTest = Convert-XamlToWindow -Xaml $TabooXaml
     if ($null -eq $SummaryXaml) { throw '缺少 FocusGuard.Summary.xaml' }
     $summaryTest = Convert-XamlToWindow -Xaml $SummaryXaml
     if ($null -eq $HistoryXaml) { throw '缺少 FocusGuard.History.xaml' }
@@ -838,7 +870,7 @@ function Invoke-FocusGuardSelfTest {
     Start-WindowEntrance -Window $mainTest -Immediate
     Start-WindowEntrance -Window $reminderTest -Pop -Immediate
     if ($null -eq ($mainTest.Content.RenderTransform)) { throw '窗口入场动画未施加到根内容元素' }
-    foreach ($xamlDoc in @($MainXaml, $ReminderXaml, $SummaryXaml, $HistoryXaml)) {
+    foreach ($xamlDoc in @($MainXaml, $ReminderXaml, $TabooXaml, $SummaryXaml, $HistoryXaml)) {
         if ($null -ne $xamlDoc -and $xamlDoc.OuterXml -match 'FillBehavior="Stop"') { throw 'XAML 交互态动画禁止使用 FillBehavior=Stop（播完弹回导致闪烁）' }
     }
     $stylesRaw = Get-Content -LiteralPath $stylesXamlPath -Raw -Encoding UTF8
@@ -855,6 +887,15 @@ function Invoke-FocusGuardSelfTest {
     if (-not (Find-Control $mainTest 'SettingsColumn')) { throw '主窗口缺少可调设置面板' }
     if (-not (Find-Control $mainTest 'MainPaneSplitter')) { throw '主窗口缺少即时拖动把手' }
     if (-not (Find-Control $reminderTest 'ReturnButton')) { throw '提醒窗口缺少 ReturnButton' }
+    if (-not (Find-Control $tabooTest 'TabooKickerLabel')) { throw '锁定窗口缺少 TabooKickerLabel' }
+    if (-not (Find-Control $tabooTest 'TabooWordLabel')) { throw '锁定窗口缺少 TabooWordLabel' }
+    if (-not (Find-Control $tabooTest 'TabooContextLabel')) { throw '锁定窗口缺少 TabooContextLabel' }
+    if (-not (Find-Control $tabooTest 'TabooCountdownLabel')) { throw '锁定窗口缺少 TabooCountdownLabel' }
+    if (-not (Find-Control $tabooTest 'TabooStrikeLabel')) { throw '锁定窗口缺少 TabooStrikeLabel' }
+    if (-not (Find-Control $mainTest 'TabooWordsList')) { throw '主窗口缺少绝对禁止词汇列表' }
+    if (-not (Find-Control $mainTest 'TabooModeCheck')) { throw '主窗口缺少绝对专注模式开关' }
+    if (-not (Find-Control $mainTest 'TabooLockBox')) { throw '主窗口缺少锁定秒数输入' }
+    if (-not (Find-Control $mainTest 'TabooGraceBox')) { throw '主窗口缺少返回宽限输入' }
     if (-not (Find-Control $summaryTest 'ScoreLabel')) { throw '分析窗口缺少 ScoreLabel' }
     if (-not (Find-Control $summaryTest 'TellOffLabel')) { throw '分析窗口缺少 TellOffLabel' }
     if (-not (Find-Control $summaryTest 'ReviewAcknowledgeCheck')) { throw '分析窗口缺少复盘确认控件' }
@@ -873,6 +914,15 @@ function Invoke-FocusGuardSelfTest {
     if (-not (Test-SnapshotAllowed -ProcessName 'chrome' -Title '课程 - Chrome' -AllowedApps @() -AllowedTitles @('课程'))) { throw '标题规则测试失败' }
     if (Test-SnapshotAllowed -ProcessName 'chrome' -Title '短视频 - Chrome' -AllowedApps @('code') -AllowedTitles @('课程')) { throw '跑偏规则测试失败' }
     if (Test-SnapshotAllowed -ProcessName 'powershell' -Title '无关脚本' -AllowedApps @('code') -AllowedTitles @('课程')) { throw 'PowerShell 不应被无条件放行' }
+    if ((Get-TabooMatch -ProcessName 'chrome' -Title '搞笑短视频 - Chrome' -TabooWords @('短视频')) -ne '短视频') { throw '禁忌标题命中测试失败' }
+    if ((Get-TabooMatch -ProcessName 'TikTok' -Title 'TikTok' -TabooWords @('tiktok.exe')) -ne 'tiktok.exe') { throw '禁忌进程名命中测试失败' }
+    if ($null -ne (Get-TabooMatch -ProcessName 'code' -Title '课程文档' -TabooWords @('短视频'))) { throw '禁忌未命中测试失败' }
+    if ($null -ne (Get-TabooMatch -ProcessName 'code' -Title '短视频' -TabooWords @())) { throw '空禁忌列表不应命中' }
+    if ((Get-TabooLockSeconds -BaseSeconds 15 -Strike 1) -ne 15) { throw '首次锁定秒数测试失败' }
+    if ((Get-TabooLockSeconds -BaseSeconds 15 -Strike 3) -ne 45) { throw '递增锁定秒数测试失败' }
+    if ((Get-TabooLockSeconds -BaseSeconds 3 -Strike 1) -ne 5) { throw '锁定秒数下限测试失败' }
+    if ((Get-TabooLockSeconds -BaseSeconds 10 -Strike 1) -ne 10) { throw '锁定秒数 10 秒以内测试失败' }
+    if ((Get-TabooLockSeconds -BaseSeconds 3600 -Strike 5) -ne 3600) { throw '锁定秒数上限测试失败' }
     $copyKeys = New-Object 'System.Collections.Generic.HashSet[string]'
     1..100 | ForEach-Object {
         $copy = New-ReminderCopy -Reason 'offtask' -Tone '直接' -Task '测试任务' -UsedKeys $copyKeys
@@ -909,6 +959,7 @@ function Invoke-FocusGuardSelfTest {
     Write-Output "FocusGuard self-test passed. IdleSeconds=$([Math]::Round($idle, 1))"
     $mainTest.Close()
     $reminderTest.Close()
+    $tabooTest.Close()
     $summaryTest.Close()
     $historyTest.Close()
 }

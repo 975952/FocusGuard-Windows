@@ -346,6 +346,108 @@ function Show-Reminder {
     [void]$popup.ShowDialog()
 }
 
+function Show-TabooLock {
+    param([string]$Word, $Snapshot, [int]$Seconds, [int]$Strike, [bool]$SameAsLast = $false)
+    if ($script:TabooLockOpen) { return }
+    $script:TabooLockOpen = $true
+    $script:TabooLockCanClose = $false
+
+    if ([bool]$SoundCheck.IsChecked) { [System.Media.SystemSounds]::Exclamation.Play() }
+
+    $lockWindow = Convert-XamlToWindow -Xaml $TabooXaml
+    $script:TabooLockWindow = $lockWindow
+    $lockWindow.Add_SourceInitialized({
+        $script:TabooLockWindowHandle = (New-Object Windows.Interop.WindowInteropHelper($lockWindow)).Handle
+    })
+    $TabooWordLabel = Find-Control $lockWindow 'TabooWordLabel'
+    $TabooContextLabel = Find-Control $lockWindow 'TabooContextLabel'
+    $TabooCountdownLabel = Find-Control $lockWindow 'TabooCountdownLabel'
+    $TabooStrikeLabel = Find-Control $lockWindow 'TabooStrikeLabel'
+
+    $baseSeconds = Get-IntSetting $TabooLockBox 15 5 3600
+    $TabooWordLabel.Text = $Word
+    $contextTitle = if ($Snapshot -and $Snapshot.Title) { $Snapshot.Title } else { '无标题窗口' }
+    $contextProcess = if ($Snapshot) { [string]$Snapshot.ProcessName } else { '' }
+    $TabooContextLabel.Text = "触发窗口：$contextTitle  ·  $contextProcess"
+    $lockSeconds = [Math]::Max(1, $Seconds)
+    $TabooCountdownLabel.Text = [string]$lockSeconds
+    if ($SameAsLast) {
+        $TabooStrikeLabel.Text = "今天第 $Strike 次触发 · 解除锁定后 30 秒内重复触发，锁定时长与上次相同"
+    } else {
+        $TabooStrikeLabel.Text = "今天第 $Strike 次触发 · 锁定 $baseSeconds 秒 × $Strike；再次触发会更久"
+    }
+
+    # 事件处理器每次触发都在新作用域执行：闭包里的局部变量自减不会跨触发保留，
+    # GetNewClosure 内的 $script: 也会指向闭包私有作用域。倒计时状态全部放 $script
+    # 作用域（与提醒弹窗同一套写法），每秒按截止时间换算剩余秒数。
+    $script:TabooLockEndsAt = (Get-Date).AddSeconds($lockSeconds)
+    $script:TabooLockCountdownLabel = $TabooCountdownLabel
+    $script:TabooLockTimer = New-Object Windows.Threading.DispatcherTimer
+    $script:TabooLockTimer.Interval = [TimeSpan]::FromSeconds(1)
+    $script:TabooLockTimer.Add_Tick({
+        if ($null -eq $script:TabooLockEndsAt) { return }
+        $remainingLock = [int][Math]::Ceiling(($script:TabooLockEndsAt - (Get-Date)).TotalSeconds)
+        if ($remainingLock -le 0) {
+            $script:TabooLockTimer.Stop()
+            $script:TabooLockCanClose = $true
+            $script:TabooLockWindow.Close()
+            return
+        }
+        $script:TabooLockCountdownLabel.Text = [string]$remainingLock
+        try {
+            $script:TabooLockWindow.Topmost = $true
+            [void]$script:TabooLockWindow.Activate()
+        } catch { }
+    })
+
+    # 倒计时结束前拦截一切关闭途径（含 Alt+F4）；程序退出时放行。
+    $lockWindow.Add_Closing({
+        param($sender, $eventArgs)
+        if (-not $script:TabooLockCanClose -and -not $script:AllowExit) {
+            $eventArgs.Cancel = $true
+        }
+    })
+    $lockWindow.Add_Closed({
+        $script:TabooLockTimer.Stop()
+        $script:TabooLockOpen = $false
+        $script:TabooLockWindow = $null
+        $script:TabooLockWindowHandle = [IntPtr]::Zero
+        $script:TabooLockCanClose = $false
+        $script:TabooLockEndsAt = $null
+        $script:TabooLockCountdownLabel = $null
+        $script:TabooLockTimer = $null
+        $script:TabooGraceUntil = (Get-Date).AddSeconds((Get-IntSetting $TabooGraceBox 10 1 10))
+    })
+    $script:TabooLockTimer.Start()
+    [void]$lockWindow.ShowDialog()
+}
+
+function Start-TabooStrike {
+    param([string]$Word, $Snapshot)
+    $todayStamp = (Get-Date).ToString('yyyy-MM-dd')
+    if ($script:TabooStrikeDate -ne $todayStamp) {
+        $script:TabooStrikeDate = $todayStamp
+        $script:TabooStrikeCount = 0
+    }
+    $script:TabooStrikeCount++
+    try { Save-Settings } catch { Write-AppLog "保存禁忌触发次数失败：$($_.Exception.Message)" }
+    # 解除锁定后 30 秒内再次触发：锁定时长与上次相同，不再递增。
+    $now = Get-Date
+    $sameAsLast = $false
+    if ($null -ne $script:TabooLastTriggerAt -and $script:TabooLastLockSeconds -gt 0) {
+        $lastLockEndedAt = $script:TabooLastTriggerAt.AddSeconds($script:TabooLastLockSeconds)
+        if (($now - $lastLockEndedAt).TotalSeconds -le 30) { $sameAsLast = $true }
+    }
+    if ($sameAsLast) {
+        $lockSeconds = $script:TabooLastLockSeconds
+    } else {
+        $lockSeconds = Get-TabooLockSeconds -BaseSeconds (Get-IntSetting $TabooLockBox 15 5 3600) -Strike $script:TabooStrikeCount
+    }
+    $script:TabooLastTriggerAt = $now
+    $script:TabooLastLockSeconds = $lockSeconds
+    Show-TabooLock -Word $Word -Snapshot $Snapshot -Seconds $lockSeconds -Strike $script:TabooStrikeCount -SameAsLast $sameAsLast
+}
+
 function Start-Session {
     $duration = Get-IntSetting $DurationBox 45 1 480
     $DurationBox.Text = [string]$duration
@@ -366,6 +468,7 @@ function Start-Session {
     $script:SessionDurationSeconds = $duration * 60.0
     $script:OffTaskSince = $null
     $script:ReminderCooldownUntil = [DateTime]::MinValue
+    $script:TabooGraceUntil = $null
     $script:ReminderCount = 0
     $script:ReturnCount = 0
     $script:TotalPausedSeconds = 0.0

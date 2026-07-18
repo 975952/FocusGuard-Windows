@@ -134,6 +134,42 @@ Describe 'New-ReminderCopy 提醒文案' {
     }
 }
 
+Describe 'Get-TabooMatch 禁忌词匹配' {
+    It '窗口标题包含禁忌词时命中' {
+        Get-TabooMatch -ProcessName 'chrome' -Title '搞笑短视频 - Chrome' -TabooWords @('短视频') | Should -Be '短视频'
+    }
+    It '进程名等值命中且忽略大小写与 .exe 后缀' {
+        Get-TabooMatch -ProcessName 'TikTok' -Title 'TikTok' -TabooWords @('tiktok.exe') | Should -Be 'tiktok.exe'
+    }
+    It '进程名只做等值匹配，不做包含匹配' {
+        Get-TabooMatch -ProcessName 'tiktokhelper' -Title '无关' -TabooWords @('tiktok') | Should -BeNullOrEmpty
+    }
+    It '进程和标题都不命中时返回空' {
+        Get-TabooMatch -ProcessName 'code' -Title '课程文档' -TabooWords @('短视频') | Should -BeNullOrEmpty
+    }
+    It '禁忌词列表为空时不命中' {
+        Get-TabooMatch -ProcessName 'chrome' -Title '短视频' -TabooWords @() | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-TabooLockSeconds 锁定秒数递增' {
+    It '锁定秒数 = 基础秒数 × 当天触发次数' {
+        Get-TabooLockSeconds -BaseSeconds 15 -Strike 1 | Should -Be 15
+        Get-TabooLockSeconds -BaseSeconds 15 -Strike 2 | Should -Be 30
+        Get-TabooLockSeconds -BaseSeconds 15 -Strike 3 | Should -Be 45
+    }
+    It '基础秒数低于 5 时被夹到 5' {
+        Get-TabooLockSeconds -BaseSeconds 3 -Strike 1 | Should -Be 5
+    }
+    It '基础秒数 10 秒以内可直接使用' {
+        Get-TabooLockSeconds -BaseSeconds 10 -Strike 1 | Should -Be 10
+        Get-TabooLockSeconds -BaseSeconds 8 -Strike 2 | Should -Be 16
+    }
+    It '乘积超过 3600 时被夹到 3600' {
+        Get-TabooLockSeconds -BaseSeconds 3600 -Strike 5 | Should -Be 3600
+    }
+}
+
 Describe 'Get-IntSetting 数值输入' {
     It '非法输入回退默认值，越界夹取上下限' {
         Get-IntSetting ([pscustomobject]@{ Text = 'abc' }) 180 30 3600 | Should -Be 180

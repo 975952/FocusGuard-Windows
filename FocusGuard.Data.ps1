@@ -140,6 +140,14 @@ $AllowedAppsCountLabel = Find-Control $window 'AllowedAppsCountLabel'
 $AllowedTitlesCountLabel = Find-Control $window 'AllowedTitlesCountLabel'
 $SoundCheck = Find-Control $window 'SoundCheck'
 $AddCurrentAppButton = Find-Control $window 'AddCurrentAppButton'
+$TabooWordsList = Find-Control $window 'TabooWordsList'
+$TabooWordInput = Find-Control $window 'TabooWordInput'
+$AddTabooWordButton = Find-Control $window 'AddTabooWordButton'
+$RemoveTabooWordButton = Find-Control $window 'RemoveTabooWordButton'
+$TabooWordsCountLabel = Find-Control $window 'TabooWordsCountLabel'
+$TabooLockBox = Find-Control $window 'TabooLockBox'
+$TabooGraceBox = Find-Control $window 'TabooGraceBox'
+$TabooModeCheck = Find-Control $window 'TabooModeCheck'
 $StartWithWindowsCheck = Find-Control $window 'StartWithWindowsCheck'
 $StartWithWindowsStatusLabel = Find-Control $window 'StartWithWindowsStatusLabel'
 $ResetLayoutButton = Find-Control $window 'ResetLayoutButton'
@@ -189,6 +197,18 @@ $script:MainWindowHandle = [IntPtr]::Zero
 $script:SessionDurationSeconds = 0.0
 $script:PopupWindow = $null
 $script:PopupWindowHandle = [IntPtr]::Zero
+$script:TabooLockOpen = $false
+$script:TabooLockWindow = $null
+$script:TabooLockWindowHandle = [IntPtr]::Zero
+$script:TabooLockCanClose = $false
+$script:TabooLockEndsAt = $null
+$script:TabooLockCountdownLabel = $null
+$script:TabooLockTimer = $null
+$script:TabooGraceUntil = $null
+$script:TabooStrikeDate = ''
+$script:TabooStrikeCount = 0
+$script:TabooLastTriggerAt = $null
+$script:TabooLastLockSeconds = 0
 $script:SettingsLoaded = $false
 $script:LastErrorMessage = ''
 $script:ReminderHistory = @()
@@ -212,6 +232,7 @@ $script:HistoryInsightWidth = 380.0
 function Update-RuleCountLabels {
     $AllowedAppsCountLabel.Text = "$( @(Get-RuleItems $AllowedAppsList).Count ) 个应用"
     $AllowedTitlesCountLabel.Text = "$( @(Get-RuleItems $AllowedTitlesList).Count ) 个关键词"
+    $TabooWordsCountLabel.Text = "$( @(Get-RuleItems $TabooWordsList).Count ) 个禁忌词"
 }
 
 function Save-Settings {
@@ -232,6 +253,12 @@ function Save-Settings {
         Tone = $tone
         AllowedApps = (@(Get-RuleItems $AllowedAppsList) -join "`r`n")
         AllowedTitles = (@(Get-RuleItems $AllowedTitlesList) -join "`r`n")
+        TabooWords = (@(Get-RuleItems $TabooWordsList) -join "`r`n")
+        TabooModeEnabled = [bool]$TabooModeCheck.IsChecked
+        TabooLockSeconds = Get-IntSetting $TabooLockBox 15 5 3600
+        TabooGraceSeconds = Get-IntSetting $TabooGraceBox 10 1 10
+        TabooStrikeDate = $script:TabooStrikeDate
+        TabooStrikes = $script:TabooStrikeCount
         Sound = [bool]$SoundCheck.IsChecked
         StartWithWindows = [bool]$StartWithWindowsCheck.IsChecked
         MainWindowWidth = [Math]::Round([Math]::Max(1180.0, [Math]::Min(2200.0, [double]$bounds.Width)))
@@ -257,6 +284,13 @@ function Load-Settings {
             if ($null -ne $settings.GraceSeconds) { $GraceBox.Text = [string]$settings.GraceSeconds }
             if ($null -ne $settings.AllowedApps) { Set-RuleItems $AllowedAppsList @(Split-RuleLines ([string]$settings.AllowedApps)) }
             if ($null -ne $settings.AllowedTitles) { Set-RuleItems $AllowedTitlesList @(Split-RuleLines ([string]$settings.AllowedTitles)) }
+            if ($null -ne $settings.TabooWords) { Set-RuleItems $TabooWordsList @(Split-RuleLines ([string]$settings.TabooWords)) }
+            if ($null -ne $settings.TabooLockSeconds) { $TabooLockBox.Text = [string]$settings.TabooLockSeconds }
+            if ($null -ne $settings.TabooGraceSeconds) { $TabooGraceBox.Text = [string]$settings.TabooGraceSeconds }
+            $tabooModeEnabled = Get-ObjectPropertyValue $settings 'TabooModeEnabled' $null
+            if ($null -ne $tabooModeEnabled) { $TabooModeCheck.IsChecked = [bool]$tabooModeEnabled }
+            $script:TabooStrikeDate = [string](Get-ObjectPropertyValue $settings 'TabooStrikeDate' '')
+            $script:TabooStrikeCount = [int](Get-ObjectPropertyValue $settings 'TabooStrikes' 0)
             if ($null -ne $settings.Sound) { $SoundCheck.IsChecked = [bool]$settings.Sound }
             $toneIndex = switch ([string]$settings.Tone) { '温和' { 0 } '暴躁' { 2 } default { 1 } }
             $ToneBox.SelectedIndex = $toneIndex
@@ -284,6 +318,12 @@ function Load-Settings {
         }
     } catch {
         # 损坏的设置文件不会阻止应用启动。
+    }
+    # 禁忌触发次数按当天累计：跨天自动清零。
+    $todayStamp = (Get-Date).ToString('yyyy-MM-dd')
+    if ($script:TabooStrikeDate -ne $todayStamp) {
+        $script:TabooStrikeDate = $todayStamp
+        $script:TabooStrikeCount = 0
     }
     Update-RuleCountLabels
     $script:AutoStartChangeInternal = $true

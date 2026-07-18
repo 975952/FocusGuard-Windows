@@ -483,6 +483,71 @@
               </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="绝对禁止" Style="{StaticResource SettingsTabItem}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,1,4,0">
+                  <StackPanel Margin="0,2,0,0">
+                    <TextBlock Text="命中即全屏锁定" FontSize="12" FontWeight="Bold" Foreground="#7C3A30"/>
+                    <TextBlock Text="开启绝对专注模式后，专注会话中前台窗口的进程名或标题一旦命中禁忌词，立即弹出无法关闭的全屏锁定窗口；倒计时结束后必须在宽限秒内离开，否则再次锁定。"
+                               Foreground="#8A5A50" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    <CheckBox x:Name="TabooModeCheck" Content="绝对专注模式（命中禁忌词立即全屏锁定）"
+                              IsChecked="True" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0"/>
+                    <TextBlock Text="关闭后，本页的禁忌词与锁定设置暂时不生效。"
+                               Style="{StaticResource FieldHint}" Margin="0,5,0,0"/>
+                  </StackPanel>
+
+                  <TextBlock Text="禁忌词" Style="{StaticResource FieldLabel}" Margin="0,17,0,0"/>
+                  <TextBlock Text="应用进程名（等值匹配）或窗口标题关键词（包含匹配），按 Enter 添加。"
+                             Style="{StaticResource FieldHint}" Margin="0,3,0,7"/>
+                  <ListBox x:Name="TabooWordsList" Height="126" SelectionMode="Extended"
+                           Style="{StaticResource RuleList}" ItemContainerStyle="{StaticResource RuleListItem}"/>
+                  <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="8"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TabooWordInput" ToolTip="输入禁忌词，例如 短视频 或 tiktok；按 Enter 添加"/>
+                    <Button Grid.Column="2" x:Name="AddTabooWordButton" Content="添加禁忌词"
+                            Style="{StaticResource SmallButton}"/>
+                  </Grid>
+                  <Grid Margin="0,7,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="RemoveTabooWordButton" Content="移除选中" Style="{StaticResource SmallButton}"/>
+                    <TextBlock Grid.Column="1" x:Name="TabooWordsCountLabel" Text="0 个禁忌词"
+                               Style="{StaticResource FieldHint}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                  </Grid>
+
+                  <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                      <TextBlock Text="基础锁定秒数" Style="{StaticResource FieldLabel}"/>
+                      <TextBlock Text="最低 5 秒" Style="{StaticResource FieldHint}" Margin="0,2,0,5"/>
+                      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBox x:Name="TabooLockBox" Text="15" ToolTip="范围：5–3600 秒"/>
+                        <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center" Foreground="#6F7B75" Margin="7,0,0,0"/>
+                      </Grid>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                      <TextBlock Text="返回宽限" Style="{StaticResource FieldLabel}"/>
+                      <TextBlock Text="倒计时结束后几秒内离开" Style="{StaticResource FieldHint}" Margin="0,2,0,5"/>
+                      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBox x:Name="TabooGraceBox" Text="10" ToolTip="范围：1–10 秒"/>
+                        <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center" Foreground="#6F7B75" Margin="7,0,0,0"/>
+                      </Grid>
+                    </StackPanel>
+                  </Grid>
+                  <TextBlock Text="实际锁定时长 = 基础锁定秒数 × 当天触发次数（第 1 次 15 秒、第 2 次 30 秒……）；解除锁定后 30 秒内再次触发时，锁定时长与上次相同。次数当天累计、跨天自动清零；仅专注会话进行中生效，暂停与休息时不检测。"
+                             Foreground="#806233" FontSize="10" TextWrapping="Wrap" Margin="0,11,0,0"/>
+                </StackPanel>
+              </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="应用选项" Style="{StaticResource SettingsTabItem}">
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,2,4,0">

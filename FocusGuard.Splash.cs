@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,6 +15,17 @@ public static class FocusGuardSplash
     [STAThread]
     public static void Main()
     {
+        // 主程序已在运行时（再次点击 exe / 启动器）不显示加载画面：
+        // 主程序会自己唤起已有窗口，这里直接退出。
+        bool alreadyRunning = false;
+        try
+        {
+            using (Mutex.OpenExisting(@"Local\FocusGuardCN_SingleInstance")) { }
+            alreadyRunning = true;
+        }
+        catch { }
+        if (alreadyRunning) return;
+
         // 启动器与主程序都可能拉起启动画面，同名互斥体保证只显示一个
         bool createdNew;
         using (var instanceMutex = new Mutex(true, @"Local\FocusGuardCN_SplashMutex", out createdNew))

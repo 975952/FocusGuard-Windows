@@ -108,6 +108,7 @@ $files = @(
     'FocusGuard.Splash.cs',
     'FocusGuard.Main.xaml',
     'FocusGuard.Reminder.xaml',
+    'FocusGuard.Taboo.xaml',
     'FocusGuard.Summary.xaml',
     'FocusGuard.History.xaml',
     'FocusGuard.Styles.xaml',

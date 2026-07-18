@@ -25,7 +25,7 @@ https://github.com/975952/FocusGuard-Windows
 
 可在“应用选项”中开启“随 Windows 启动”。它只写入当前用户启动项，不需要管理员权限；下次登录后会以最小化状态运行，不会主动弹出旧复盘，直到你打开主窗口。
 
-`FocusGuard.exe`、`FocusGuard.Native.dll`、`FocusGuard.ps1`、`FocusGuard.Core.ps1`、`FocusGuard.Data.ps1`、`FocusGuard.Session.ps1`、`FocusGuard.App.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Summary.xaml`、`FocusGuard.History.xaml` 和 `FocusGuard.Styles.xaml` 需要放在同一文件夹中。
+`FocusGuard.exe`、`FocusGuard.Native.dll`、`FocusGuard.ps1`、`FocusGuard.Core.ps1`、`FocusGuard.Data.ps1`、`FocusGuard.Session.ps1`、`FocusGuard.App.ps1`、`FocusGuard.Main.xaml`、`FocusGuard.Reminder.xaml`、`FocusGuard.Taboo.xaml`、`FocusGuard.Summary.xaml`、`FocusGuard.History.xaml` 和 `FocusGuard.Styles.xaml` 需要放在同一文件夹中。
 
 ## 最好用的设置方式
 
@@ -36,6 +36,16 @@ https://github.com/975952/FocusGuard-Windows
 5. 第一次建议使用 45 分钟、无操作 180 秒、跑偏宽限 25 秒。
 
 界面提供 25、45、60 分钟快捷设置。提醒出现时可按 `Enter` 立即返回任务，或按 `Esc` 休息 5 分钟；休息期间专注倒计时会冻结。
+
+## 绝对禁止
+
+在“绝对禁止”页签里维护禁忌词。只有开启“绝对专注模式”后禁忌词才生效；专注会话进行中，前台窗口的进程名（等值匹配）或窗口标题（包含匹配）一旦命中禁忌词：
+
+1. 立即弹出无法关闭的全屏锁定窗口（`Alt+F4`、`Esc` 均无效），显示命中词汇、触发窗口和剩余锁定秒数；
+2. 锁定时长 = 基础锁定秒数 × 当天触发次数，基础秒数可设置、最低 5 秒；解除锁定后 30 秒内再次触发时，锁定时长与上次相同；
+3. 倒计时结束后窗口自动消失，必须在“返回宽限”（1–10 秒）内离开禁忌内容，否则立即再次锁定。
+
+触发次数按当天累计并写入本机设置，重启应用不清零，跨天自动清零。仅在专注会话进行中检测；暂停、休息和未开始会话时不生效。
 
 ## 专注评分与分析
 
@@ -89,6 +99,7 @@ https://github.com/975952/FocusGuard-Windows
 - 某些应用不会提供有意义的窗口标题，需要按进程名放行。
 - 阅读纸质材料或长时间看屏幕时可能被判定为“无操作”，可把无操作阈值调高。
 - 这是行为提醒工具，不是无法绕过的系统封锁软件；你始终可以暂停或退出。
+- 绝对禁止的全屏锁定只覆盖主显示器，不遮挡副屏；通过任务管理器结束进程仍然可以绕过。
 
 ## 开发与构建
 
